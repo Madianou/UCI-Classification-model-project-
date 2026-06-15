@@ -20,6 +20,26 @@ CATEGORICAL_FEATURES: list[str] = [
 
 ALL_FEATURES: list[str] = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 
+# Human-readable descriptions for each column (keys match the hyphenated
+# dataset column names, not the underscore variants used elsewhere).
+FEATURE_DESCRIPTIONS: dict[str, str] = {
+    "age": "Âge de l'individu",
+    "workclass": "Type d'employeur ou statut professionnel",
+    "fnlwgt": "Poids statistique attribué à l'individu dans l'enquête (représentativité de la population)",
+    "education": "Niveau d'éducation sous forme catégorielle",
+    "education-num": "Niveau d'éducation sous forme numérique",
+    "marital-status": "Statut marital de l'individu",
+    "occupation": "Profession exercée",
+    "relationship": "Lien familial ou statut dans le ménage",
+    "race": "Catégorie ethnique déclarée",
+    "sex": "Sexe de l'individu",
+    "capital-gain": "Gains en capital déclarés",
+    "capital-loss": "Pertes en capital déclarées",
+    "hours-per-week": "Nombre d'heures travaillées par semaine",
+    "native-country": "Pays d'origine",
+    "income": "Classe de revenu annuel : <=50K ou >50K",
+}
+
 TARGET: str = "income"
 # Positive class after stripping whitespace/trailing dots
 POSITIVE_CLASS: str = ">50K"
