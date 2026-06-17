@@ -15,8 +15,8 @@ eda.plot_class_balance()
 
 eda.plot_missing_values()
 
-eda.plot_numerical_distributions()
+eda.plot_numerical_bivariate()
 
-eda.plot_categorical_distributions()
+eda.plot_categorical_bivariate()
 
 eda.plot_correlation_matrix()

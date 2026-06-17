@@ -8,6 +8,7 @@ from ..data.schemas import (
     CATEGORICAL_FEATURES,
     FEATURE_DESCRIPTIONS,
     NUMERICAL_FEATURES,
+    POSITIVE_CLASS,
     TARGET,
 )
 
@@ -57,8 +58,17 @@ class EDAAnalyzer:
         counts = self.y.value_counts()
         return pd.DataFrame({"count": counts, "pct": counts / len(self.y) * 100})
 
-    def numerical_stats(self) -> pd.DataFrame:
-        return self.X[NUMERICAL_FEATURES].describe().T
+    def numerical_stats(self, by_class: bool = False) -> pd.DataFrame:
+        """describe() of the numerical features.
+
+        by_class=True breaks the statistics down per income class (bivariate),
+        so each feature's mean/median/std can be compared between <=50K and
+        >50K — a quick read of which variables separate the classes.
+        """
+        if not by_class:
+            return self.X[NUMERICAL_FEATURES].describe().T
+        # rows = (feature, stat), columns = income class
+        return self.df.groupby(TARGET)[NUMERICAL_FEATURES].describe().T
 
     def categorical_stats(self, rare_threshold: float = 1.0) -> pd.DataFrame:
         """Per categorical variable, a decision table for encoding choices.
@@ -83,6 +93,78 @@ class EDAAnalyzer:
                 }
             )
         return pd.DataFrame(rows).set_index("feature")
+
+    def income_rate_by(
+        self,
+        columns: str | list[str] | None = None,
+        head: int | None = None,
+        dropna: bool = True,
+    ) -> pd.DataFrame:
+        """>50K rate and count per modality, for one or several categorical
+        columns, sorted by rate (descending) within each variable.
+
+        - columns=None  -> every categorical feature;
+        - a single name -> a simple (modality-indexed) table;
+        - several names -> one combined MultiIndex (variable x modality) table,
+          to avoid printing many separate tables.
+        - head=N keeps only the N highest and N lowest rates per variable,
+          a compact view for high-cardinality variables (e.g. native-country).
+        - dropna=False keeps missing values as a "(Manquant)" modality, whose
+          rate can itself be informative (e.g. missing occupation -> mostly
+          <=50K).
+        """
+        if columns is None:
+            columns = CATEGORICAL_FEATURES
+        if isinstance(columns, str):
+            columns = [columns]
+        parts = {}
+        for col in columns:
+            key = self.df[col] if dropna else self.df[col].fillna("(Manquant)")
+            g = self.df.groupby(key)[TARGET]
+            out = pd.DataFrame(
+                {
+                    "effectif": g.size(),
+                    "taux_>50K (%)": g.apply(
+                        lambda s: (s == POSITIVE_CLASS).mean() * 100
+                    ),
+                }
+            ).sort_values("taux_>50K (%)", ascending=False)
+            if head is not None and len(out) > 2 * head:
+                out = pd.concat([out.head(head), out.tail(head)])
+            out.index.name = "modalité"
+            parts[col] = out
+        if len(parts) == 1:
+            return next(iter(parts.values()))
+        return pd.concat(parts, names=["variable", "modalité"])
+
+    def outlier_stats(self, whisker: float = 1.5) -> pd.DataFrame:
+        """Per numerical feature, the IQR-rule outlier count, rate and bounds.
+
+        A value is an outlier if it lies below Q1 - whisker*IQR or above
+        Q3 + whisker*IQR (whisker=1.5 is the standard boxplot rule). Sorted by
+        outlier rate, descending.
+        """
+        rows = []
+        for col in NUMERICAL_FEATURES:
+            s = self.X[col].dropna()
+            q1, q3 = s.quantile(0.25), s.quantile(0.75)
+            iqr = q3 - q1
+            low, high = q1 - whisker * iqr, q3 + whisker * iqr
+            mask = (s < low) | (s > high)
+            rows.append(
+                {
+                    "feature": col,
+                    "n_outliers": int(mask.sum()),
+                    "pct": mask.mean() * 100,
+                    "lower": low,
+                    "upper": high,
+                }
+            )
+        return (
+            pd.DataFrame(rows)
+            .set_index("feature")
+            .sort_values("pct", ascending=False)
+        )
 
     def summary(self) -> None:
         print(f"Dataset shape : {self.shape()}")
@@ -121,25 +203,52 @@ class EDAAnalyzer:
         fig.tight_layout()
         return fig
 
-    def plot_numerical_distributions(self, figsize: tuple = (16, 10)) -> plt.Figure:
-        n_cols = 3
-        n_rows = int(np.ceil(len(NUMERICAL_FEATURES) / n_cols))
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    def plot_numerical_bivariate(
+        self,
+        variable: str | None = None,
+        filter_positive: bool = False,
+        figsize: tuple | None = None,
+    ) -> plt.Figure:
+        """Bivariate view of numerical variable(s) vs the income class: one row
+        per variable with the distribution (left) and a boxplot by class
+        (right). Discrete variables get integer-aligned bins and no KDE.
+
+        variable=None plots every numerical feature; pass a name to plot just
+        one. filter_positive=True keeps only strictly positive values (useful
+        for the zero-inflated capital features), applied per variable.
+        """
         palette = {"<=50K": "steelblue", ">50K": "tomato"}
-        for ax, col in zip(axes.flat, NUMERICAL_FEATURES):
-            for label, color in palette.items():
-                mask = self.y == label
-                ax.hist(self.X.loc[mask, col], alpha=0.6, label=label,
-                        bins=30, color=color)
-            ax.set_title(col)
-            ax.legend(fontsize=8)
-        for ax in axes.flat[len(NUMERICAL_FEATURES):]:
-            ax.set_visible(False)
-        fig.suptitle("Numerical feature distributions by income class", y=1.02)
+        variables = [variable] if variable is not None else NUMERICAL_FEATURES
+        n = len(variables)
+        figsize = figsize or (16, 4 * n)
+        fig, axes = plt.subplots(n, 2, figsize=figsize, squeeze=False)
+        for i, col in enumerate(variables):
+            sub = self.df[self.df[col] > 0] if filter_positive else self.df
+            s = sub[col].dropna()
+            is_discrete = s.nunique() <= 25 and np.all(s == s.round())
+            bins = np.arange(s.min() - 0.5, s.max() + 1.5, 1) if is_discrete else 30
+            suffix = " (valeurs > 0)" if filter_positive else ""
+
+            # Left: distribution split by income class
+            sns.histplot(data=sub, x=col, hue=TARGET, bins=bins,
+                         kde=not is_discrete, palette=palette, ax=axes[i, 0])
+            axes[i, 0].set_title(f"Distribution de {col} selon le revenu{suffix}",
+                                 fontweight="bold")
+            axes[i, 0].set_ylabel("Nombre de personnes")
+
+            # Right: boxplot per income class
+            sns.boxplot(data=sub, x=TARGET, y=col, hue=TARGET,
+                        palette=palette, legend=False, ax=axes[i, 1])
+            axes[i, 1].set_title(f"Boxplot de {col} selon le revenu{suffix}",
+                                 fontweight="bold")
+            axes[i, 1].set_xlabel("Classe de revenu")
+
+        fig.suptitle("Analyse des variables numériques selon la classe de revenu",
+                     fontsize=18, fontweight="bold", y=1.005)
         fig.tight_layout()
         return fig
 
-    def plot_numeric_diagnostics(
+    def plot_numerical_univariate(
         self,
         variable: str,
         title: str | None = None,
@@ -225,16 +334,30 @@ class EDAAnalyzer:
         fig.tight_layout()
         return fig
 
-    def zero_proportion_by_class(self, variable: str) -> pd.DataFrame:
-        """Within each income class, the % of rows that are zero vs non-zero.
+    def zero_proportion_by_class(
+        self,
+        variables: list[str] | None = None,
+        normalize: bool = True,
+    ) -> pd.DataFrame:
+        """Bivariate: within each income class, zero vs non-zero breakdown for
+        each variable (MultiIndex variable x income class).
 
-        Designed for zero-inflated features (capital-gain, capital-loss): the
-        gap between classes on the "> 0" column is where the discriminative
-        signal lives (e.g. what share of >50K has a non-zero capital gain).
+        normalize=True returns row percentages (% within class); normalize=False
+        returns raw counts. Designed for zero-inflated features (capital-gain,
+        capital-loss): the gap between classes on the "> 0" column is where the
+        discriminative signal lives.
         """
-        label = self.df[variable].fillna(0).eq(0).map({True: "= 0", False: "> 0"})
-        ct = pd.crosstab(self.y, label, normalize="index") * 100
-        return ct.reindex(columns=["= 0", "> 0"], fill_value=0)
+        variables = variables or ["capital-gain", "capital-loss"]
+        parts = {}
+        for var in variables:
+            label = self.df[var].fillna(0).eq(0).map({True: "= 0", False: "> 0"})
+            if normalize:
+                ct = pd.crosstab(self.y, label, normalize="index") * 100
+            else:
+                ct = pd.crosstab(self.y, label)
+            parts[var] = ct.reindex(columns=["= 0", "> 0"], fill_value=0)
+        return pd.concat(parts.values(), keys=parts.keys(),
+                         names=["variable", TARGET])
 
     def plot_zero_proportion_by_class(
         self,
@@ -244,9 +367,10 @@ class EDAAnalyzer:
         """Stacked bars of zero vs non-zero share per income class, one panel
         per variable (defaults to the zero-inflated capital features)."""
         variables = variables or ["capital-gain", "capital-loss"]
+        table = self.zero_proportion_by_class(variables)
         fig, axes = plt.subplots(1, len(variables), figsize=figsize, squeeze=False)
         for ax, var in zip(axes.flat, variables):
-            ct = self.zero_proportion_by_class(var)
+            ct = table.loc[var]
             ct.plot(kind="bar", stacked=True, ax=ax,
                     color=["lightgrey", "tomato"], rot=0)
             ax.set_title(var)
@@ -300,14 +424,19 @@ class EDAAnalyzer:
         fig.tight_layout()
         return fig
 
-    def plot_categorical_distributions(self, figsize: tuple = (20, 18)) -> plt.Figure:
+    def plot_categorical_bivariate(self, figsize: tuple = (20, 18)) -> plt.Figure:
         n_cols = 2
         n_rows = int(np.ceil(len(CATEGORICAL_FEATURES) / n_cols))
         fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+        # Global >50K rate: a modality above this line over-represents high
+        # income, below it under-represents it. Far from the line = strong signal.
+        baseline = (self.y == POSITIVE_CLASS).mean() * 100
         for ax, col in zip(axes.flat, CATEGORICAL_FEATURES):
             ct = pd.crosstab(self.X[col], self.y, normalize="index") * 100
             ct.plot(kind="bar", ax=ax, color=["steelblue", "tomato"],
                     rot=30, fontsize=8)
+            ax.axhline(baseline, ls="--", color="tomato", lw=1.2,
+                       label=f"moy. {POSITIVE_CLASS} ({baseline:.1f}%)")
             ax.set_title(col)
             ax.set_ylabel("% within category")
             ax.legend(fontsize=7, loc="upper right")
