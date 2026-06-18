@@ -12,3 +12,6 @@ __pycache__/
 
 # Local dataset cache (downloaded artifact, regenerable)
 data/
+
+# Working notes for the AI assistant
+CLAUDE.md

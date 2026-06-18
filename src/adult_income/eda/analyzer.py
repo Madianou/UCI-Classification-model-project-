@@ -70,6 +70,21 @@ class EDAAnalyzer:
         # rows = (feature, stat), columns = income class
         return self.df.groupby(TARGET)[NUMERICAL_FEATURES].describe().T
 
+    def numeric_target_correlation(self) -> pd.Series:
+        """Point-biserial correlation of each numerical feature with the target.
+
+        Equivalent to Pearson between the feature and the 0/1-encoded income, so
+        it captures the signed linear/monotonic link (positive = associated with
+        >50K). Linear only: it underestimates non-linear features such as
+        capital-gain — read it alongside the mutual information.
+        """
+        income_binary = (self.y == POSITIVE_CLASS).astype(int)
+        return (
+            self.X[NUMERICAL_FEATURES]
+            .corrwith(income_binary)
+            .sort_values(ascending=False)
+        )
+
     def categorical_stats(self, rare_threshold: float = 1.0) -> pd.DataFrame:
         """Per categorical variable, a decision table for encoding choices.
 
@@ -93,6 +108,163 @@ class EDAAnalyzer:
                 }
             )
         return pd.DataFrame(rows).set_index("feature")
+
+    @staticmethod
+    def _cramers_v_from_chi2(
+        chi2: float, n: int, r: int, k: int, bias_correction: bool = True
+    ) -> float:
+        """Cramér's V from a precomputed chi-square statistic and table shape.
+
+        Shared by cramers_v (quali<->quali) and chi2_numeric_target (binned
+        quanti<->target), so the Bergsma (2013) bias correction lives in one
+        place.
+        """
+        if not bias_correction:
+            denom = n * min(k - 1, r - 1)
+            return float(np.sqrt(chi2 / denom)) if denom > 0 else 0.0
+        phi2 = chi2 / n
+        phi2corr = max(0.0, phi2 - (k - 1) * (r - 1) / (n - 1))
+        rcorr = r - (r - 1) ** 2 / (n - 1)
+        kcorr = k - (k - 1) ** 2 / (n - 1)
+        denom = min(kcorr - 1, rcorr - 1)
+        return float(np.sqrt(phi2corr / denom)) if denom > 0 else 0.0
+
+    def cramers_v(self, col_a: str, col_b: str, bias_correction: bool = True) -> float:
+        """Cramér's V association between two categorical columns, in [0, 1].
+
+        0 = independent (every modality keeps the global split), 1 = perfect
+        association. Derived from the chi-square of their crosstab; with
+        bias_correction (Bergsma 2013) to avoid overestimation on small
+        samples / high cardinality.
+        """
+        confusion = pd.crosstab(self.df[col_a], self.df[col_b])
+        chi2 = stats.chi2_contingency(confusion)[0]
+        n = confusion.to_numpy().sum()
+        r, k = confusion.shape
+        return self._cramers_v_from_chi2(chi2, n, r, k, bias_correction)
+
+    def chi2_numeric_target(
+        self,
+        variables: str | list[str] | None = None,
+        n_bins: int = 10,
+        binning: str = "quantile",
+        bias_correction: bool = True,
+    ) -> pd.DataFrame:
+        """Chi-square independence test between numerical feature(s) (binned)
+        and the categorical target, with Cramér's V as the effect size.
+
+        The chi-square test needs categories, so each quantitative variable is
+        discretised first:
+        - binning="quantile" -> equal-sized bins (pd.qcut), robust to skew, so
+          every bin keeps enough observations for the chi-square expected-count
+          assumption (the right default for fnlwgt, age, hours-per-week);
+        - binning="uniform"  -> equal-width bins (pd.cut).
+
+        At n~49k almost everything tests "significant", so always read p_value
+        together with cramers_v: e.g. fnlwgt comes out significant (p~1e-7) yet
+        with a negligible effect (Cramér's V~0.03) -> the drop decision holds.
+        "Significatif != important".
+
+        Returns one row per variable (chi2, p_value, dof, cramers_v, n_bins),
+        sorted by effect size. NB: heavily zero-inflated features
+        (capital-gain/loss) collapse to very few bins here -> prefer the
+        has_capital_* binary split for those.
+        """
+        if variables is None:
+            variables = NUMERICAL_FEATURES
+        if isinstance(variables, str):
+            variables = [variables]
+        rows = []
+        for col in variables:
+            s = self.X[col]
+            if binning == "quantile":
+                binned = pd.qcut(s, q=n_bins, duplicates="drop")
+            elif binning == "uniform":
+                binned = pd.cut(s, bins=n_bins)
+            else:
+                raise ValueError("binning must be 'quantile' or 'uniform'")
+            table = pd.crosstab(binned, self.y)
+            chi2, p, dof, _ = stats.chi2_contingency(table)
+            n = table.to_numpy().sum()
+            r, k = table.shape
+            rows.append(
+                {
+                    "feature": col,
+                    "chi2": chi2,
+                    "p_value": p,
+                    "dof": dof,
+                    "cramers_v": self._cramers_v_from_chi2(
+                        chi2, n, r, k, bias_correction
+                    ),
+                    "n_bins": r,
+                }
+            )
+        return (
+            pd.DataFrame(rows)
+            .set_index("feature")
+            .sort_values("cramers_v", ascending=False)
+        )
+
+    def mann_whitney_target(
+        self, variables: str | list[str] | None = None
+    ) -> pd.DataFrame:
+        """Mann-Whitney U test of each numerical feature between the two income
+        classes, with the rank-biserial correlation as effect size.
+
+        Non-parametric (no normality assumption) and needs no binning, so it is
+        the natural quanti<->binary-target test and avoids the artifacts of
+        chi2_numeric_target (e.g. capital-gain/loss collapsing to a single bin).
+
+        rank_biserial lies in [-1, 1]: the sign gives the direction (positive =
+        feature larger among >50K), the magnitude the effect size (|r| < 0.1
+        negligible). As always at n~49k, p_value is ~0 almost everywhere, so
+        read it together with the effect size (e.g. fnlwgt: significant yet
+        rank_biserial ~ 0 -> drop decision holds).
+
+        Returns one row per variable (U, p_value, rank_biserial, median_pos,
+        median_neg), sorted by absolute effect size.
+        """
+        if variables is None:
+            variables = NUMERICAL_FEATURES
+        if isinstance(variables, str):
+            variables = [variables]
+        is_pos = self.df[TARGET] == POSITIVE_CLASS
+        rows = []
+        for col in variables:
+            pos = self.df.loc[is_pos, col].dropna()
+            neg = self.df.loc[~is_pos, col].dropna()
+            u, p = stats.mannwhitneyu(pos, neg, alternative="two-sided")
+            # rank-biserial = 2 * P(pos > neg) - 1, derived from U
+            rank_biserial = 2 * u / (len(pos) * len(neg)) - 1
+            rows.append(
+                {
+                    "feature": col,
+                    "U": u,
+                    "p_value": p,
+                    "rank_biserial": rank_biserial,
+                    "median_pos": pos.median(),
+                    "median_neg": neg.median(),
+                }
+            )
+        out = pd.DataFrame(rows).set_index("feature")
+        return out.reindex(out["rank_biserial"].abs().sort_values(ascending=False).index)
+
+    def cramers_v_matrix(self, include_target: bool = False) -> pd.DataFrame:
+        """Symmetric Cramér's V matrix between all categorical features.
+
+        include_target=True adds the income target as a row/column, so its
+        column ranks the quali<->target association (the categorical analog of
+        numeric_target_correlation).
+        """
+        cols = list(CATEGORICAL_FEATURES)
+        if include_target:
+            cols = cols + [TARGET]
+        mat = pd.DataFrame(np.eye(len(cols)), index=cols, columns=cols)
+        for i, a in enumerate(cols):
+            for b in cols[i + 1:]:
+                v = self.cramers_v(a, b)
+                mat.loc[a, b] = mat.loc[b, a] = v
+        return mat
 
     def income_rate_by(
         self,
@@ -455,6 +627,93 @@ class EDAAnalyzer:
             mask=np.triu(np.ones_like(corr, dtype=bool)),
         )
         ax.set_title("Numerical feature correlations")
+        fig.tight_layout()
+        return fig
+
+    def plot_cramers_v_matrix(
+        self, include_target: bool = False, figsize: tuple = (9, 7)
+    ) -> plt.Figure:
+        """Heatmap of the Cramér's V matrix between categorical features
+        (optionally including the target column)."""
+        mat = self.cramers_v_matrix(include_target=include_target)
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(
+            mat, annot=True, fmt=".2f", cmap="rocket_r",
+            vmin=0, vmax=1, ax=ax, square=True, linewidths=0.5,
+            mask=np.triu(np.ones_like(mat, dtype=bool), k=1),
+        )
+        ax.set_title("Cramér's V : associations entre variables catégorielles")
+        fig.tight_layout()
+        return fig
+
+    def plot_categorical_crosstab(
+        self,
+        col_a: str,
+        col_b: str,
+        normalize: str | None = "index",
+        figsize: tuple = (10, 7),
+    ) -> plt.Figure:
+        """Heatmap of the contingency table between two categorical features.
+
+        normalize="index" -> row-conditional P(col_b | col_a) in %, the clearest
+        way to read which modality of col_a maps to which of col_b (e.g. how
+        marital-status maps onto relationship). normalize=None -> raw counts.
+        Complements cramers_v: the V says how strong, this shows where.
+        """
+        norm = normalize or False
+        ct = pd.crosstab(self.df[col_a], self.df[col_b], normalize=norm)
+        if norm:
+            ct = ct * 100
+            fmt, cbar_label = ".0f", "% par ligne"
+        else:
+            fmt, cbar_label = "d", "effectif"
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(ct, annot=True, fmt=fmt, cmap="rocket_r", ax=ax,
+                    linewidths=0.5, cbar_kws={"label": cbar_label})
+        suffix = " (% par ligne)" if norm else " (effectifs)"
+        ax.set_title(f"{col_a} × {col_b}{suffix}")
+        fig.tight_layout()
+        return fig
+
+    def plot_education_equivalence(
+        self,
+        cat_col: str = "education",
+        num_col: str = "education-num",
+        figsize: tuple = (10, 5),
+        verbose: bool = True,
+    ) -> plt.Figure:
+        """Overlay the >50K rate computed by cat_col (categorical) and by
+        num_col (numeric), to prove the two encodings define identical groups.
+
+        The curves coincide because each cat_col modality maps to exactly one
+        num_col value. With verbose=True, also prints the two rate vectors and
+        whether they are equal.
+        """
+        order = self.df.groupby(cat_col)[num_col].first().sort_values().index
+        rc = (self.df.groupby(cat_col)[TARGET]
+              .apply(lambda s: (s == POSITIVE_CLASS).mean() * 100).reindex(order))
+        rn = (self.df.groupby(num_col)[TARGET]
+              .apply(lambda s: (s == POSITIVE_CLASS).mean() * 100))
+        identical = bool(np.allclose(rc.values, rn.values))
+
+        if verbose:
+            print(f"rc (par {cat_col})    :", rc.round(2).values)
+            print(f"rn (par {num_col}):", rn.round(2).values)
+            print("Taux identiques entre les deux groupements ?", identical)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(rn.index, rc.values, "o-", color="steelblue", lw=2.5,
+                label=f"par {cat_col} (catégoriel)")
+        ax.plot(rn.index, rn.values, "x--", color="tomato", lw=1.2,
+                label=f"par {num_col} (numérique)")
+        for xi, yi, lab in zip(rn.index, rc.values, order):
+            ax.annotate(lab, (xi, yi), rotation=45, fontsize=7,
+                        ha="right", va="bottom")
+        ax.set_xlabel(num_col)
+        ax.set_ylabel("% >50K")
+        ax.set_title(f"{cat_col} vs {num_col} — taux >50K superposés "
+                     f"(identiques : {identical})")
+        ax.legend(loc="upper left")
         fig.tight_layout()
         return fig
 
