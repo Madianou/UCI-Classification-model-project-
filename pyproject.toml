@@ -25,6 +25,8 @@ dependencies = [
     "ucimlrepo>=0.0.7",
     # Utilities
     "tqdm>=4.66",
+    "nbdime>=4.0.4",
+    "nbstripout>=0.9.1",
 ]
 
 [project.optional-dependencies]
