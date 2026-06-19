@@ -1,0 +1,87 @@
+{
+  "logistic_regression": {
+    "best_params": {
+      "C": 94.30800471587918,
+      "solver": "saga"
+    },
+    "best_value": 0.7761941392765023,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "decision_tree": {
+    "best_params": {
+      "max_depth": 15,
+      "min_samples_split": 6,
+      "min_samples_leaf": 20,
+      "criterion": "entropy"
+    },
+    "best_value": 0.7705560968829793,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "random_forest": {
+    "best_params": {
+      "n_estimators": 269,
+      "max_depth": 18,
+      "min_samples_split": 10,
+      "max_features": "sqrt"
+    },
+    "best_value": 0.79952706234461,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "gradient_boosting": {
+    "best_params": {
+      "n_estimators": 181,
+      "learning_rate": 0.04465754043577679,
+      "max_depth": 8,
+      "subsample": 0.7672753514931056,
+      "min_samples_leaf": 16
+    },
+    "best_value": 0.8120767317851397,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "adaboost": {
+    "best_params": {
+      "n_estimators": 330,
+      "learning_rate": 1.8661235042876683
+    },
+    "best_value": 0.797852692249611,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "knn": {
+    "best_params": {
+      "knn__n_neighbors": 50,
+      "knn__weights": "uniform",
+      "knn__metric": "euclidean"
+    },
+    "best_value": 0.751528669288324,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "xgboost": {
+    "best_params": {
+      "n_estimators": 243,
+      "learning_rate": 0.04187922746823591,
+      "max_depth": 7,
+      "subsample": 0.6318910948150704,
+      "colsample_bytree": 0.9667113448337745,
+      "reg_alpha": 1.3641866997947212e-07,
+      "reg_lambda": 0.2508823064787459,
+      "min_child_weight": 5
+    },
+    "best_value": 0.8129280710201721,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "svm": {
+    "best_params": {
+      "estimator__C": 96.22588620260444
+    },
+    "best_value": 0.7760030833807123,
+    "scoring": "average_precision",
+    "n_trials": 50
+  }
+}

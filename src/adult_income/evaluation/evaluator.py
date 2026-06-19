@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
+    PrecisionRecallDisplay,
     RocCurveDisplay,
     accuracy_score,
     average_precision_score,
@@ -55,9 +56,7 @@ class ModelEvaluator:
 
     def cross_validate(self, name: str, pipeline, X, y) -> dict:
         """Run stratified CV and store mean ± std for each metric."""
-        raw = cross_validate(
-            pipeline, X, y, cv=self.cv, scoring=_SCORING, n_jobs=-1
-        )
+        raw = cross_validate(pipeline, X, y, cv=self.cv, scoring=_SCORING, n_jobs=-1)
         summary = {
             metric: {
                 "mean": raw[f"test_{metric}"].mean(),
@@ -104,7 +103,7 @@ class ModelEvaluator:
 
     def print_classification_report(self, name: str, pipeline, X_test, y_test) -> None:
         y_pred = pipeline.predict(X_test)
-        print(f"\n{'='*50}\n{name}\n{'='*50}")
+        print(f"\n{'=' * 50}\n{name}\n{'=' * 50}")
         print(classification_report(y_test, y_pred))
 
     # ------------------------------------------------------------------
@@ -123,7 +122,9 @@ class ModelEvaluator:
         return df.sort_values(f"{sort_by}_mean", ascending=False).reset_index(drop=True)
 
     def test_comparison_table(self, sort_by: str = "roc_auc") -> pd.DataFrame:
-        rows = [{"model": name, **metrics} for name, metrics in self.test_results.items()]
+        rows = [
+            {"model": name, **metrics} for name, metrics in self.test_results.items()
+        ]
         df = pd.DataFrame(rows)
         for col in df.columns[1:]:
             df[col] = df[col].round(4)
@@ -179,12 +180,43 @@ class ModelEvaluator:
         fig.tight_layout()
         return fig
 
+    def plot_pr_curves(
+        self, X_test, y_test, names: list[str] | None = None, figsize: tuple = (9, 7)
+    ) -> plt.Figure:
+        target_names = names or list(self._fitted_pipelines)
+        fig, ax = plt.subplots(figsize=figsize)
+        for name in target_names:
+            if name in self._fitted_pipelines:
+                PrecisionRecallDisplay.from_estimator(
+                    self._fitted_pipelines[name], X_test, y_test, ax=ax, name=name
+                )
+        baseline = (y_test == 1).mean()
+        ax.axhline(
+            baseline,
+            color="k",
+            linestyle="--",
+            label=f"Random (AP={baseline:.2f})",
+        )
+        ax.set_title("Precision-Recall Curves — all models")
+        ax.legend(loc="lower left", fontsize=8)
+        fig.tight_layout()
+        return fig
+
     def plot_metric_heatmap(self, figsize: tuple = (10, 6)) -> plt.Figure:
         df = self.test_comparison_table().set_index("model")
         fig, ax = plt.subplots(figsize=figsize)
         import seaborn as sns
-        sns.heatmap(df.astype(float), annot=True, fmt=".3f", cmap="YlGn",
-                    ax=ax, linewidths=0.5, vmin=0.5, vmax=1.0)
+
+        sns.heatmap(
+            df.astype(float),
+            annot=True,
+            fmt=".3f",
+            cmap="YlGn",
+            ax=ax,
+            linewidths=0.5,
+            vmin=0.5,
+            vmax=1.0,
+        )
         ax.set_title("Test metrics heatmap")
         fig.tight_layout()
         return fig

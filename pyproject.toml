@@ -27,6 +27,8 @@ dependencies = [
     "tqdm>=4.66",
     "nbdime>=4.0.4",
     "nbstripout>=0.9.1",
+    "streamlit>=1.58.0",
+    "scikit-learn-intelex>=2026.1.0",
 ]
 
 [project.optional-dependencies]

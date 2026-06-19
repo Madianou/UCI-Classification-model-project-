@@ -10,7 +10,7 @@ from .data.schemas import (
 from .eda.analyzer import EDAAnalyzer
 from .evaluation.evaluator import ModelEvaluator
 from .modeling.registry import ModelRegistry
-# from .optimization.tuner import HyperparameterTuner  # module pas encore créé
+from .optimization.tuner import HyperparameterTuner
 from .preprocessing.pipeline import PreprocessingPipeline
 
 __all__ = [

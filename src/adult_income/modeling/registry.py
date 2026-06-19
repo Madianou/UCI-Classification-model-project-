@@ -1,6 +1,7 @@
 from sklearn.base import BaseEstimator
 from sklearn.decomposition import PCA
 from sklearn.dummy import DummyClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import (
     AdaBoostClassifier,
     GradientBoostingClassifier,
@@ -8,14 +9,11 @@ from sklearn.ensemble import (
     StackingClassifier,
 )
 from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
 
 
 def _make_knn() -> Pipeline:
@@ -50,19 +48,23 @@ _CATALOGUE: dict[str, type] = {
     "dummy": lambda: DummyClassifier(strategy="most_frequent"),
     "logistic_regression": lambda: LogisticRegression(max_iter=1000, random_state=42),
     "decision_tree": lambda: DecisionTreeClassifier(random_state=42),
-    "random_forest": lambda: RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
+    "random_forest": lambda: RandomForestClassifier(
+        n_estimators=100, random_state=42, n_jobs=-1
+    ),
     "gradient_boosting": lambda: GradientBoostingClassifier(random_state=42),
     "adaboost": lambda: AdaBoostClassifier(random_state=42),
-    "svm": lambda: SVC(probability=True, random_state=42),
-    "knn": _make_knn,  # PCA(20) + KNN
-    "naive_bayes": lambda: GaussianNB(),
-    "xgboost": lambda: XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1),
-    "lightgbm": lambda: LGBMClassifier(random_state=42, verbose=-1, n_jobs=-1),
-    # allow_writing_files=False : sinon CatBoost tente de créer un dossier
-    # catboost_info/ pour ses logs, ce qui échoue en CV parallèle (collisions).
-    "catboost": lambda: CatBoostClassifier(
-        random_state=42, verbose=0, allow_writing_files=False
+    # SVM linéaire : minimisation de la perte hinge L2-régularisée. On utilise
+    # LinearSVC (solveur liblinear) plutôt que SVC(kernel="linear") : il scale
+    # quasi-linéairement avec n_samples là où libsvm est en O(n²)-O(n³), donc
+    # ~100× plus rapide sur Adult (~32k lignes). dual="auto" choisit la bonne
+    # formulation (primal quand n_samples > n_features) ; max_iter relevé pour
+    # éviter les ConvergenceWarning. LinearSVC n'expose pas predict_proba, d'où
+    # le CalibratedClassifierCV qui ajoute des probabilités calibrées.
+    "svm": lambda: CalibratedClassifierCV(
+        LinearSVC(dual="auto", max_iter=5000, random_state=42), ensemble=False
     ),
+    "knn": _make_knn,  # PCA(20) + KNN
+    "xgboost": lambda: XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1),
     "stacking": _make_stacking,
 }
 
@@ -78,9 +80,7 @@ class ModelRegistry:
     def get(cls, name: str) -> BaseEstimator:
         """Return a fresh (unfitted) estimator by name."""
         if name not in _CATALOGUE:
-            raise ValueError(
-                f"Unknown model {name!r}. Available: {cls.available()}"
-            )
+            raise ValueError(f"Unknown model {name!r}. Available: {cls.available()}")
         return _CATALOGUE[name]()
 
     @classmethod

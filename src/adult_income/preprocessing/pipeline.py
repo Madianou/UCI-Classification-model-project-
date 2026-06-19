@@ -100,7 +100,10 @@ class PreprocessingPipeline:
             log_num = Pipeline(
                 [
                     ("imputer", SimpleImputer(strategy="median")),
-                    ("log1p", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+                    (
+                        "log1p",
+                        FunctionTransformer(np.log1p, feature_names_out="one-to-one"),
+                    ),
                     *([("scaler", RobustScaler())] if self.scaling else []),
                 ]
             )
@@ -152,6 +155,10 @@ class PreprocessingPipeline:
         ]
 
         self._preprocessor = ColumnTransformer(transformers, remainder="drop")
+        # Emit a DataFrame (not ndarray) so feature names stay consistent
+        # between fit and predict. Avoids the spurious LightGBM/sklearn
+        # "X does not have valid feature names" warning (LightGBM #6798).
+        self._preprocessor.set_output(transform="pandas")
         return self._preprocessor
 
     def _missing_imputer(self) -> SimpleImputer:
