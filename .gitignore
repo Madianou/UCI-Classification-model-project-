@@ -18,10 +18,6 @@ artifacts/
 # garder uniquement les meilleurs params, pas la base Optuna
 !artifacts/optuna_ap/best_params.json
 
-# Optuna persistence (bases SQLite + JSON des meilleurs params)
-artifacts/
-
-
 Projet8_0.ipynb
 
 #notebooks artifacts
