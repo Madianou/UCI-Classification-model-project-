@@ -28,9 +28,10 @@ src/adult_income/
     └── evaluator.py      # ModelEvaluator — CV, métriques test, ROC, heatmap comparaison
 
 notebooks/
-├── 01_eda.py             # Analyse exploratoire
-├── 02_modeling_and_eval.py  # Pipelines + comparaison des modèles
-└── 03_hyperopt.py        # Hyper-optimisation Optuna + évaluation finale
+├── eda.ipynb            # Analyse exploratoire (sur le train uniquement)
+├── preprocessing.ipynb  # Effets de la pipeline de prétraitement
+├── modeling.ipynb       # Comparaison CV des modèles + ablations + finalistes
+└── (évaluation finale sur le test : notebook dédié, après l'hyper-optimisation)
 ```
 
 ## Utilisation rapide

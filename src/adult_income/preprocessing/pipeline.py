@@ -7,7 +7,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
-    TargetEncoder,
     StandardScaler,
     RobustScaler,
     FunctionTransformer,
@@ -19,7 +18,6 @@ from ..data.schemas import (
     BINARY_NUMERICAL_FEATURES,
     MODE_CATEGORICAL_FEATURES,
     UNKNOWN_ONEHOT_FEATURES,
-    UNKNOWN_TARGET_FEATURES,
     GROUPED_CATEGORICAL_FEATURES,
     RARE_CATEGORY_MIN_FREQUENCY,
 )
@@ -29,8 +27,8 @@ class PreprocessingPipeline:
     """
     Builds a sklearn ColumnTransformer for the Adult dataset.
 
-    Categorical features are one-hot encoded (occupation is target-encoded);
-    this single encoding works for every model in the project.
+    All categorical features are one-hot encoded; this single encoding works
+    for every model in the project.
 
     Parameters
     ----------
@@ -126,34 +124,22 @@ class PreprocessingPipeline:
         # Low-cardinality, no informative missingness: mode impute + encode.
         cat_mode = Pipeline(
             [
-                ("replace_qm", self._qm_step()),
                 ("imputer", SimpleImputer(strategy="most_frequent")),
                 ("encoder", self._make_cat_encoder()),
             ]
         )
-        # workclass: informative missingness -> "Unknown" category (or mode in
-        # the ablation variant via ``unknown_category=False``).
+        # workclass & occupation: informative missingness -> "Unknown" category
+        # (or mode in the ablation variant via ``unknown_category=False``) + OneHot.
         cat_unknown_onehot = Pipeline(
             [
-                ("replace_qm", self._qm_step()),
                 ("imputer", self._missing_imputer()),
                 ("encoder", self._make_cat_encoder()),
-            ]
-        )
-        # occupation: same missingness handling, but high cardinality ->
-        # TargetEncoder (cross-fitted, no leakage).
-        cat_unknown_target = Pipeline(
-            [
-                ("replace_qm", self._qm_step()),
-                ("imputer", self._missing_imputer()),
-                ("encoder", TargetEncoder()),
             ]
         )
         # native-country: non-informative missingness -> mode impute; ~20 rare
         # modalities grouped together (min_frequency = RARE_CATEGORY_MIN_FREQUENCY).
         cat_grouped = Pipeline(
             [
-                ("replace_qm", self._qm_step()),
                 ("imputer", SimpleImputer(strategy="most_frequent")),
                 ("encoder", self._make_cat_encoder(RARE_CATEGORY_MIN_FREQUENCY)),
             ]
@@ -162,18 +148,11 @@ class PreprocessingPipeline:
         transformers += [
             ("cat", cat_mode, MODE_CATEGORICAL_FEATURES),
             ("cat_unknown", cat_unknown_onehot, UNKNOWN_ONEHOT_FEATURES),
-            ("cat_occupation", cat_unknown_target, UNKNOWN_TARGET_FEATURES),
             ("cat_country", cat_grouped, GROUPED_CATEGORICAL_FEATURES),
         ]
 
         self._preprocessor = ColumnTransformer(transformers, remainder="drop")
         return self._preprocessor
-
-    def _qm_step(self) -> FunctionTransformer:
-        """Fresh FunctionTransformer turning '?' into NaN (safety net)."""
-        return FunctionTransformer(
-            self.replace_questions_marks, feature_names_out="one-to-one"
-        )
 
     def _missing_imputer(self) -> SimpleImputer:
         """Imputer for the informative-missingness columns (workclass/occupation).
@@ -232,14 +211,6 @@ class PreprocessingPipeline:
 
     def transform_target(self, y: pd.Series) -> np.ndarray:
         return self._label_encoder.transform(y)
-
-    def replace_questions_marks(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Replace '?' with np.nan across the columns of the given subset.
-
-        Each ColumnTransformer branch only receives its own columns, so we
-        operate on whatever is present instead of the global feature list.
-        """
-        return df.replace("?", np.nan)
 
     @property
     def label_encoder(self) -> LabelEncoder:

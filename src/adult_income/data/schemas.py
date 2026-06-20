@@ -110,8 +110,8 @@ MODE_CATEGORICAL_FEATURES: list[str] = [
 
 # Categoricals whose missingness is INFORMATIVE (~9.5% >50K vs 24% baseline):
 # keep the signal with a dedicated "Unknown" category instead of imputing.
-UNKNOWN_ONEHOT_FEATURES: list[str] = ["workclass"]    # low card -> OneHot
-UNKNOWN_TARGET_FEATURES: list[str] = ["occupation"]   # high card -> TargetEncoder
+# Both are one-hot encoded (occupation's 15 modalities stay manageable).
+UNKNOWN_ONEHOT_FEATURES: list[str] = ["workclass", "occupation"]
 
 # High-cardinality, NON-informative missingness -> impute mode + group rare modalities
 GROUPED_CATEGORICAL_FEATURES: list[str] = ["native-country"]
