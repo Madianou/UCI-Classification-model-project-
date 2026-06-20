@@ -20,6 +20,27 @@ CATEGORICAL_FEATURES: list[str] = [
 
 ALL_FEATURES: list[str] = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 
+# Column order exactly as it appears in the raw UCI files (adult.data /
+# adult.test), which are headerless. This differs from ALL_FEATURES (which
+# groups numericals first); DataLoader uses it to name the CSV columns.
+RAW_COLUMNS: list[str] = [
+    "age",
+    "workclass",
+    "fnlwgt",
+    "education",
+    "education-num",
+    "marital-status",
+    "occupation",
+    "relationship",
+    "race",
+    "sex",
+    "capital-gain",
+    "capital-loss",
+    "hours-per-week",
+    "native-country",
+    "income",
+]
+
 # Human-readable descriptions for each column (keys match the hyphenated
 # dataset column names, not the underscore variants used elsewhere).
 FEATURE_DESCRIPTIONS: dict[str, str] = {

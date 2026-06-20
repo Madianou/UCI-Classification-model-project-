@@ -2,83 +2,76 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from ucimlrepo import fetch_ucirepo
 
-from .schemas import TARGET
+from .schemas import RAW_COLUMNS, TARGET
 
 
 class DataLoader:
-    """Downloads and splits the Adult Income dataset (UCI id=2)."""
+    """Loads the Adult Income dataset from the local UCI files.
 
-    DATASET_ID = 2
-    # Project-root/data/raw/adult.pkl (loader.py is src/adult_income/data/).
-    # Pickle keeps dtypes/NaN exactly and needs no extra engine (unlike parquet).
-    CACHE_PATH = Path(__file__).resolve().parents[3] / "data" / "raw" / "adult.pkl"
+    The raw files live in ``data/adult/`` :
 
-    def __init__(
-        self,
-        test_size: float = 0.2,
-        random_state: int = 42,
-        use_cache: bool = True,
-    ) -> None:
-        self.test_size = test_size
-        self.random_state = random_state
-        self.use_cache = use_cache
+    - ``adult.data`` : 32 561 training rows (labels ``<=50K`` / ``>50K``)
+    - ``adult.test``  : 16 281 test rows. Its first line is a junk comment and
+      its labels carry a trailing dot (``<=50K.``), both handled here.
 
-    def load(self) -> tuple[pd.DataFrame, pd.Series]:
-        """Return (X, y), served from a local parquet cache when available.
+    Only the **official split** is exposed: each file *is* a split. The test set
+    is meant to stay untouched until final evaluation — in particular the EDA
+    should run on the **train set only** (use :meth:`load_train`).
+    """
 
-        The first call fetches from UCI (slow) and caches the cleaned data;
-        subsequent calls read the local file instantly. Set use_cache=False
-        or call clear_cache() to force a fresh download.
+    DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "adult"
+    TRAIN_FILE = DATA_DIR / "adult.data"
+    TEST_FILE = DATA_DIR / "adult.test"
+
+    # ------------------------------------------------------------------
+    # Raw file reading
+    # ------------------------------------------------------------------
+
+    def _read_file(self, path: Path, skiprows: int = 0) -> tuple[pd.DataFrame, pd.Series]:
+        """Read one headerless Adult CSV and return cleaned (X, y).
+
+        ``skipinitialspace`` strips the space after each comma, ``na_values``
+        turns the ``?`` marker into real NaN, and trailing dots / whitespace are
+        removed from the target labels.
         """
-        if self.use_cache and self.CACHE_PATH.exists():
-            df = pd.read_pickle(self.CACHE_PATH)
-            return df.drop(columns=[TARGET]), df[TARGET]
-
-        dataset = fetch_ucirepo(id=self.DATASET_ID)
-        X: pd.DataFrame = dataset.data.features.copy()
-        y: pd.Series = dataset.data.targets.squeeze().copy()
-
-        # The Adult dataset uses "?" as a missing-value marker in part of the
-        # data. Normalise it to real NaN at the source so every downstream
-        # consumer (EDA, preprocessing) works with a single missing convention.
-        X = X.replace("?", np.nan)
-
-        # Normalise target labels: strip whitespace and trailing dots
-        y = y.str.strip().str.rstrip(".")
-
-        if self.use_cache:
-            self.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            df = X.copy()
-            df[TARGET] = y.values
-            df.to_pickle(self.CACHE_PATH)
-
-        return X, y
-
-    @classmethod
-    def clear_cache(cls) -> None:
-        """Delete the local parquet cache so the next load() refetches."""
-        cls.CACHE_PATH.unlink(missing_ok=True)
-
-    def split(
-        self, X: pd.DataFrame, y: pd.Series
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """Stratified train/test split."""
-        return train_test_split(
-            X, y,
-            test_size=self.test_size,
-            random_state=self.random_state,
-            stratify=y,
+        df = pd.read_csv(
+            path,
+            header=None,
+            names=RAW_COLUMNS,
+            skipinitialspace=True,
+            skiprows=skiprows,
+            na_values="?",
+            skip_blank_lines=True,
         )
+        # Drop any residual blank/garbage rows (e.g. trailing newline).
+        df = df.dropna(subset=[TARGET])
+
+        y = df[TARGET].astype(str).str.strip().str.rstrip(".")
+        X = df.drop(columns=[TARGET])
+        # Belt-and-braces: normalise any stray "?" missed by na_values.
+        X = X.replace("?", np.nan)
+        return X.reset_index(drop=True), y.reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def load_train(self) -> tuple[pd.DataFrame, pd.Series]:
+        """Return (X_train, y_train) from ``adult.data`` for EDA, preproc, modeling and opti."""
+        return self._read_file(self.TRAIN_FILE)
+
+    def load_test(self) -> tuple[pd.DataFrame, pd.Series]:
+        """Return (X_test, y_test) from ``adult.test`` for final evaluation only."""
+        return self._read_file(self.TEST_FILE, skiprows=1)
 
     def load_and_split(
         self,
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """Convenience: load then split in one call."""
-        X, y = self.load()
-        return self.split(X, y)
+        """Return (X_train, X_test, y_train, y_test) using the official split."""
+        X_train, y_train = self.load_train()
+        X_test, y_test = self.load_test()
+        return X_train, X_test, y_train, y_test
 
     @staticmethod
     def class_distribution(y: pd.Series) -> pd.DataFrame:

@@ -2,10 +2,10 @@
 
 from adult_income import DataLoader, EDAAnalyzer
 
-loader = DataLoader(test_size=0.2, random_state=42)
-X, y = loader.load()
+loader = DataLoader()
+X, y = loader.load_train()  # AED sur le TRAIN uniquement ; le test reste de côté
 
-print(f"Données chargées : {X.shape[0]} observations, {X.shape[1]} features")
+print(f"Données chargées (train) : {X.shape[0]} observations, {X.shape[1]} features")
 print(loader.class_distribution(y))
 
 eda = EDAAnalyzer(X, y)

@@ -8,9 +8,9 @@ from .data.schemas import (
     TARGET,
 )
 from .eda.analyzer import EDAAnalyzer
-# from .evaluation.evaluator import ModelEvaluator
-# from .modeling.registry import ModelRegistry
-# from .optimization.tuner import HyperparameterTuner
+from .evaluation.evaluator import ModelEvaluator
+from .modeling.registry import ModelRegistry
+# from .optimization.tuner import HyperparameterTuner  # module pas encore créé
 from .preprocessing.pipeline import PreprocessingPipeline
 
 __all__ = [
@@ -18,7 +18,6 @@ __all__ = [
     "EDAAnalyzer",
     "PreprocessingPipeline",
     "ModelRegistry",
-    "HyperparameterTuner",
     "ModelEvaluator",
     "NUMERICAL_FEATURES",
     "CATEGORICAL_FEATURES",

@@ -15,7 +15,7 @@ uv sync --group dev   # installe toutes les dépendances + jupyter
 src/adult_income/
 ├── data/
 │   ├── schemas.py        # constantes : noms des features, TARGET, classes
-│   └── loader.py         # DataLoader — télécharge le dataset UCI, split stratifié
+│   └── loader.py         # DataLoader — lit les fichiers UCI locaux (split officiel / aléatoire)
 ├── eda/
 │   └── analyzer.py       # EDAAnalyzer — stats descriptives, distributions, corrélations
 ├── preprocessing/

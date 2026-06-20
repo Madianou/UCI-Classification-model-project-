@@ -25,7 +25,11 @@ _CATALOGUE: dict[str, type] = {
     "naive_bayes": lambda: GaussianNB(),
     "xgboost": lambda: XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1),
     "lightgbm": lambda: LGBMClassifier(random_state=42, verbose=-1, n_jobs=-1),
-    "catboost": lambda: CatBoostClassifier(random_state=42, verbose=0),
+    # allow_writing_files=False : sinon CatBoost tente de créer un dossier
+    # catboost_info/ pour ses logs, ce qui échoue en CV parallèle (collisions).
+    "catboost": lambda: CatBoostClassifier(
+        random_state=42, verbose=0, allow_writing_files=False
+    ),
 }
 
 

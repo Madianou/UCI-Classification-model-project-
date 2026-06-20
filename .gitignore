@@ -10,8 +10,5 @@ __pycache__/
 # OS
 .DS_Store
 
-# Local dataset cache (downloaded artifact, regenerable)
-data/
-
 # Working notes for the AI assistant
 CLAUDE.md
