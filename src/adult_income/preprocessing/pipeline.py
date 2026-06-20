@@ -7,7 +7,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
-    OrdinalEncoder,
     TargetEncoder,
     StandardScaler,
     RobustScaler,
@@ -30,23 +29,42 @@ class PreprocessingPipeline:
     """
     Builds a sklearn ColumnTransformer for the Adult dataset.
 
+    Categorical features are one-hot encoded (occupation is target-encoded);
+    this single encoding works for every model in the project.
+
     Parameters
     ----------
-    encoding : "onehot" | "ordinal"
-        Categorical encoding strategy. OneHot works best for linear models;
-        ordinal is more compact for tree-based ones.
     scaling : bool
-        Apply StandardScaler to numerical features (needed for LR, SVM, KNN)
-        except capital-gain and capital-loss.
-        Apply RobustScaler instead of StandardScaler if outliers are present.
-        (because RobustScaler is better if there are outliers)
+        Apply StandardScaler to the normal numerical features (needed for LR,
+        SVM, KNN) and RobustScaler to the log1p'd capital-gain. Harmless for
+        tree-based models, which are scale-invariant.
+
+    The next three flags keep the EDA-bilan choices by default; they exist to
+    run preprocessing **ablations** (one factor at a time):
+
+    drop_fnlwgt : bool
+        True (default) drops fnlwgt; False keeps it as a scaled numeric.
+    unknown_category : bool
+        True (default) keeps a dedicated "Unknown" category for the informative
+        missingness of workclass/occupation; False imputes them by the mode.
+    capital_treatment : "hurdle" | "naive"
+        "hurdle" (default) = log1p(capital-gain) + has_* binary flags ;
+        "naive" = capital-gain/loss as plain scaled numerics (no log, no flag).
     """
 
-    def __init__(self, encoding: str = "onehot", scaling: bool = True) -> None:
-        if encoding not in {"onehot", "ordinal"}:
-            raise ValueError("encoding must be 'onehot' or 'ordinal'")
-        self.encoding = encoding
+    def __init__(
+        self,
+        scaling: bool = True,
+        drop_fnlwgt: bool = True,
+        unknown_category: bool = True,
+        capital_treatment: str = "hurdle",
+    ) -> None:
+        if capital_treatment not in {"hurdle", "naive"}:
+            raise ValueError("capital_treatment must be 'hurdle' or 'naive'")
         self.scaling = scaling
+        self.drop_fnlwgt = drop_fnlwgt
+        self.unknown_category = unknown_category
+        self.capital_treatment = capital_treatment
         self._preprocessor: ColumnTransformer | None = None
         self._label_encoder = LabelEncoder()
 
@@ -57,87 +75,77 @@ class PreprocessingPipeline:
     def build(self) -> ColumnTransformer:
         """Return a fitted-ready ColumnTransformer.
 
-        The branches follow the EDA bilan: each feature group gets the
-        treatment its distribution calls for, rather than a generic one.
+        Branches follow the EDA bilan by default; the constructor flags
+        (``drop_fnlwgt``, ``unknown_category``, ``capital_treatment``) toggle
+        the debatable choices for ablation studies.
         """
 
         # --- Numerical -------------------------------------------------
-        # Normal numerics: median impute + StandardScaler.
+        # Normal numerics: median impute + StandardScaler. fnlwgt joins this
+        # branch when kept, and so do capital-* in the "naive" mode.
+        normal_features = list(NORMAL_NUMERICAL_FEATURES)
+        if not self.drop_fnlwgt:
+            normal_features.append("fnlwgt")
+        if self.capital_treatment == "naive":
+            normal_features += list(BINARY_NUMERICAL_FEATURES)
+
         normal_num = Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="median")),
                 *([("scaler", StandardScaler())] if self.scaling else []),
             ]
         )
-        # capital-gain: log1p compresses the heavy tail, RobustScaler tames
-        # the remaining outliers while preserving the (predictive) magnitude.
-        log_num = Pipeline(
-            [
-                ("imputer", SimpleImputer(strategy="median")),
-                (
-                    "log1p",
-                    FunctionTransformer(np.log1p, feature_names_out="one-to-one"),
-                ),
-                *([("scaler", RobustScaler())] if self.scaling else []),
-            ]
-        )
-        # capital-gain & capital-loss: zero/non-zero "hurdle" flag has_*.
-        binary_num = Pipeline(
-            [
-                (
-                    "binarize",
-                    FunctionTransformer(
-                        self.binarize_positive,
-                        feature_names_out=self._has_feature_names,
+        transformers = [("num", normal_num, normal_features)]
+
+        # capital-* "hurdle" decomposition: log1p(capital-gain) + has_* flags.
+        if self.capital_treatment == "hurdle":
+            log_num = Pipeline(
+                [
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("log1p", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+                    *([("scaler", RobustScaler())] if self.scaling else []),
+                ]
+            )
+            binary_num = Pipeline(
+                [
+                    (
+                        "binarize",
+                        FunctionTransformer(
+                            self.binarize_positive,
+                            feature_names_out=self._has_feature_names,
+                        ),
                     ),
-                ),
+                ]
+            )
+            transformers += [
+                ("num_log", log_num, LOG_NUMERICAL_FEATURES),
+                ("num_bin", binary_num, BINARY_NUMERICAL_FEATURES),
             ]
-        )
 
         # --- Categorical ----------------------------------------------
         # Low-cardinality, no informative missingness: mode impute + encode.
         cat_mode = Pipeline(
             [
-                (
-                    "replace_qm",
-                    FunctionTransformer(
-                        self.replace_questions_marks, feature_names_out="one-to-one"
-                    ),
-                ),
+                ("replace_qm", self._qm_step()),
                 ("imputer", SimpleImputer(strategy="most_frequent")),
                 ("encoder", self._make_cat_encoder()),
             ]
         )
-        # workclass: missingness is informative -> dedicated "Unknown" category.
+        # workclass: informative missingness -> "Unknown" category (or mode in
+        # the ablation variant via ``unknown_category=False``).
         cat_unknown_onehot = Pipeline(
             [
-                (
-                    "replace_qm", # au cas ou le nettoyage au load n'a pas suffit
-                    FunctionTransformer(
-                        self.replace_questions_marks, feature_names_out="one-to-one"
-                    ),
-                ),
-                (
-                    "imputer",
-                    SimpleImputer(strategy="constant", fill_value="Unknown"),
-                ),
+                ("replace_qm", self._qm_step()),
+                ("imputer", self._missing_imputer()),
                 ("encoder", self._make_cat_encoder()),
             ]
         )
-        # occupation: informative missingness too, but high cardinality ->
-        # "Unknown" category + TargetEncoder (cross-fitted, no leakage).
+        # occupation: same missingness handling, but high cardinality ->
+        # TargetEncoder (cross-fitted, no leakage).
         cat_unknown_target = Pipeline(
             [
-                (
-                    "replace_qm", # au cas ou le nettoyage au load n'a pas suffit
-                    FunctionTransformer(
-                        self.replace_questions_marks, feature_names_out="one-to-one"
-                    ),
-                ),
-                (
-                    "imputer",
-                    SimpleImputer(strategy="constant", fill_value="Unknown"),
-                ),
+                ("replace_qm", self._qm_step()),
+                ("imputer", self._missing_imputer()),
                 ("encoder", TargetEncoder()),
             ]
         )
@@ -145,52 +153,49 @@ class PreprocessingPipeline:
         # modalities grouped together (min_frequency = RARE_CATEGORY_MIN_FREQUENCY).
         cat_grouped = Pipeline(
             [
-                (
-                    "replace_qm", # au cas ou le nettoyage au load n'a pas suffit
-                    FunctionTransformer(
-                        self.replace_questions_marks, feature_names_out="one-to-one"
-                    ),
-                ),
+                ("replace_qm", self._qm_step()),
                 ("imputer", SimpleImputer(strategy="most_frequent")),
-                (
-                    "encoder",
-                    self._make_cat_encoder(RARE_CATEGORY_MIN_FREQUENCY),
-                ),
+                ("encoder", self._make_cat_encoder(RARE_CATEGORY_MIN_FREQUENCY)),
             ]
         )
 
-        self._preprocessor = ColumnTransformer(
-            transformers=[
-                ("num", normal_num, NORMAL_NUMERICAL_FEATURES),
-                ("num_log", log_num, LOG_NUMERICAL_FEATURES),
-                ("num_bin", binary_num, BINARY_NUMERICAL_FEATURES),
-                ("cat", cat_mode, MODE_CATEGORICAL_FEATURES),
-                ("cat_unknown", cat_unknown_onehot, UNKNOWN_ONEHOT_FEATURES),
-                ("cat_occupation", cat_unknown_target, UNKNOWN_TARGET_FEATURES),
-                ("cat_country", cat_grouped, GROUPED_CATEGORICAL_FEATURES),
-            ],
-            remainder="drop",
-        )
+        transformers += [
+            ("cat", cat_mode, MODE_CATEGORICAL_FEATURES),
+            ("cat_unknown", cat_unknown_onehot, UNKNOWN_ONEHOT_FEATURES),
+            ("cat_occupation", cat_unknown_target, UNKNOWN_TARGET_FEATURES),
+            ("cat_country", cat_grouped, GROUPED_CATEGORICAL_FEATURES),
+        ]
+
+        self._preprocessor = ColumnTransformer(transformers, remainder="drop")
         return self._preprocessor
 
+    def _qm_step(self) -> FunctionTransformer:
+        """Fresh FunctionTransformer turning '?' into NaN (safety net)."""
+        return FunctionTransformer(
+            self.replace_questions_marks, feature_names_out="one-to-one"
+        )
+
+    def _missing_imputer(self) -> SimpleImputer:
+        """Imputer for the informative-missingness columns (workclass/occupation).
+
+        Dedicated "Unknown" category by default; mode imputation in the ablation.
+        """
+        if self.unknown_category:
+            return SimpleImputer(strategy="constant", fill_value="Unknown")
+        return SimpleImputer(strategy="most_frequent")
+
     def _make_cat_encoder(self, min_frequency: int | None = None):
-        """OneHot (linear models) or Ordinal (trees) encoder.
+        """One-hot encoder for categoricals.
 
         ``min_frequency`` groups rare modalities together; left at ``None``
         every modality keeps its own column (only native-country opts in to
         grouping, per the EDA bilan). ``infrequent_if_exist`` still protects
         against unseen categories at transform time even without grouping.
         """
-        if self.encoding == "onehot":
-            return OneHotEncoder(
-                handle_unknown="infrequent_if_exist",
-                min_frequency=min_frequency,
-                sparse_output=False,
-            )
-        return OrdinalEncoder(
-            handle_unknown="use_encoded_value",
-            unknown_value=-1,
+        return OneHotEncoder(
+            handle_unknown="infrequent_if_exist",
             min_frequency=min_frequency,
+            sparse_output=False,
         )
 
     @staticmethod

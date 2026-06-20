@@ -45,7 +45,7 @@ from adult_income import (
 X_train, X_test, y_train, y_test = DataLoader().load_and_split()
 
 # 2. Preprocessing
-pp = PreprocessingPipeline(encoding="onehot", scaling=True)
+pp = PreprocessingPipeline(scaling=True)
 y_train_enc = pp.fit_transform_target(y_train)
 y_test_enc  = pp.transform_target(y_test)
 
