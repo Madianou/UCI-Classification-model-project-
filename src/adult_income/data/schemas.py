@@ -83,3 +83,38 @@ ONEHOT_CATEGORICAL_FEATURES: list[str] = [
 HIGH_CARD_ACTIVE: list[str] = [
     f for f in HIGH_CARDINALITY_CATEGORICAL_FEATURES if f not in FEATURES_TO_DROP
 ]
+
+# ----------------------------------------------------------------------
+# EDA-aligned feature groupings (bilan §9 of the EDA notebook).
+# These refine the generic groupings above with per-feature decisions,
+# so the pipeline applies a tailored treatment instead of one-size-fits-all.
+# ----------------------------------------------------------------------
+
+# capital-gain : kept via log1p + RobustScaler (the heavy tail is predictive)
+LOG_NUMERICAL_FEATURES: list[str] = ["capital-gain"]
+
+# capital-gain & capital-loss : binary has_* flag (zero-inflated "hurdle" part).
+# capital-loss gets ONLY this flag (its magnitude carries little extra signal);
+# capital-gain gets both the flag and the log1p column above.
+BINARY_NUMERICAL_FEATURES: list[str] = ["capital-gain", "capital-loss"]
+
+# Low-cardinality categoricals with no informative missingness -> mode + encode
+MODE_CATEGORICAL_FEATURES: list[str] = [
+    "marital-status",
+    "relationship",
+    "race",
+    "sex",
+]
+
+# Categoricals whose missingness is INFORMATIVE (~9.5% >50K vs 24% baseline):
+# keep the signal with a dedicated "Unknown" category instead of imputing.
+UNKNOWN_ONEHOT_FEATURES: list[str] = ["workclass"]    # low card -> OneHot
+UNKNOWN_TARGET_FEATURES: list[str] = ["occupation"]   # high card -> TargetEncoder
+
+# High-cardinality, NON-informative missingness -> impute mode + group rare modalities
+GROUPED_CATEGORICAL_FEATURES: list[str] = ["native-country"]
+
+# Modalities with fewer than this many observations are grouped together.
+# Applied ONLY to native-country (~20 rare modalities), per the EDA bilan.
+# Every other categorical keeps all its modalities, even rare ones.
+RARE_CATEGORY_MIN_FREQUENCY: int = 50
