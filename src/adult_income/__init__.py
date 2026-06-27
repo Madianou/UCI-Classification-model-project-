@@ -8,6 +8,7 @@ from .data.schemas import (
     TARGET,
 )
 from .eda.analyzer import EDAAnalyzer
+from .eda.clustering import ClusteringAnalyzer
 from .evaluation.evaluator import ModelEvaluator
 from .modeling.registry import ModelRegistry
 from .optimization.tuner import HyperparameterTuner
@@ -16,6 +17,7 @@ from .preprocessing.pipeline import PreprocessingPipeline
 __all__ = [
     "DataLoader",
     "EDAAnalyzer",
+    "ClusteringAnalyzer",
     "PreprocessingPipeline",
     "ModelRegistry",
     "ModelEvaluator",
