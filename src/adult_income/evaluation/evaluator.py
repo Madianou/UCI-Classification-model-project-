@@ -15,7 +15,12 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.model_selection import (
+    StratifiedKFold,
+    cross_val_predict,
+    cross_validate,
+    learning_curve,
+)
 
 
 _SCORING = {
@@ -77,6 +82,16 @@ class ModelEvaluator:
             ap = self.cv_results[name]["average_precision"]["mean"]
             auc = self.cv_results[name]["roc_auc"]["mean"]
             print(f"AP={ap:.4f} AUC={auc:.4f}")
+
+    def out_of_fold_probabilities(self, pipeline, X, y, n_jobs: int = -1) -> np.ndarray:
+        """Probabilités hors-pli de la classe positive (``cross_val_predict``).
+
+        Chaque observation est notée par un modèle qui ne l'a pas vue en
+        entraînement → estimation sans fuite, utilisée pour régler le seuil.
+        """
+        return cross_val_predict(
+            pipeline, X, y, cv=self.cv, method="predict_proba", n_jobs=n_jobs
+        )[:, 1]
 
     # ------------------------------------------------------------------
     # Test-set evaluation
@@ -246,6 +261,102 @@ class ModelEvaluator:
         return pd.DataFrame(
             [self.metrics_at_threshold(y_true, y_proba, t) for t in thresholds]
         )
+
+    @staticmethod
+    def threshold_search_table(y_true, y_proba, thresholds=None) -> pd.DataFrame:
+        """Précision / rappel / F1 pour une grille de seuils.
+
+        ``thresholds`` par défaut = ``np.linspace(0.10, 0.90, 81)``.
+        """
+        if thresholds is None:
+            thresholds = np.linspace(0.10, 0.90, 81)
+        y_true = np.asarray(y_true)
+        y_proba = np.asarray(y_proba)
+        rows = []
+        for t in thresholds:
+            y_hat = (y_proba >= t).astype(int)
+            rows.append({
+                "threshold": float(t),
+                "precision": precision_score(y_true, y_hat, zero_division=0),
+                "recall": recall_score(y_true, y_hat, zero_division=0),
+                "f1": f1_score(y_true, y_hat, zero_division=0),
+            })
+        return pd.DataFrame(rows)
+
+    @classmethod
+    def find_best_threshold(
+        cls, y_true, y_proba, metric: str = "f1", thresholds=None
+    ) -> tuple[float, pd.DataFrame]:
+        """Seuil maximisant ``metric`` (F1 par défaut) sur la grille.
+
+        Retourne ``(seuil, table)``. En cas d'égalité, le **plus petit** seuil
+        est retenu (tri secondaire déterministe).
+        """
+        table = cls.threshold_search_table(y_true, y_proba, thresholds)
+        best_row = table.sort_values(
+            [metric, "threshold"], ascending=[False, True]
+        ).iloc[0]
+        return float(best_row["threshold"]), table
+
+    def plot_learning_curve(
+        self,
+        pipeline,
+        X,
+        y,
+        scoring: str = "average_precision",
+        train_sizes=None,
+        model_name: str | None = None,
+        figsize: tuple = (9, 5),
+    ) -> plt.Figure:
+        """Courbe d'apprentissage (entraînement vs validation croisée)."""
+        if train_sizes is None:
+            train_sizes = np.linspace(0.15, 1.0, 6)
+        sizes, train_scores, val_scores = learning_curve(
+            pipeline, X, y, cv=self.cv, scoring=scoring,
+            train_sizes=train_sizes, n_jobs=-1,
+        )
+        train_mean, train_std = train_scores.mean(1), train_scores.std(1)
+        val_mean, val_std = val_scores.mean(1), val_scores.std(1)
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(sizes, train_mean, "o-", color="steelblue", label="Entraînement")
+        ax.plot(sizes, val_mean, "o-", color="tomato", label="Validation croisée")
+        ax.fill_between(sizes, train_mean - train_std, train_mean + train_std,
+                        alpha=0.15, color="steelblue")
+        ax.fill_between(sizes, val_mean - val_std, val_mean + val_std,
+                        alpha=0.15, color="tomato")
+        ax.set_xlabel("Taille de l'entraînement")
+        ylabel = "Average Precision" if scoring == "average_precision" else scoring
+        ax.set_ylabel(ylabel)
+        title = "Courbe d'apprentissage"
+        if model_name:
+            title += f" — {model_name} optimisé"
+        ax.set_title(title)
+        ax.grid(alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        return fig
+
+    @staticmethod
+    def plot_threshold_curves(
+        table: pd.DataFrame, best_threshold: float | None = None, figsize: tuple = (8, 4)
+    ) -> plt.Figure:
+        """Précision / rappel / F1 selon le seuil (sortie de ``threshold_search_table``)."""
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.plot(table["threshold"], table["precision"], label="Précision")
+        ax.plot(table["threshold"], table["recall"], label="Rappel")
+        ax.plot(table["threshold"], table["f1"], label="F1", color="black", lw=2)
+        if best_threshold is not None:
+            ax.axvline(best_threshold, ls="--", color="gray",
+                       label=f"Seuil retenu = {best_threshold:.2f}")
+        ax.axvline(0.5, ls=":", color="lightgray", label="Seuil par défaut = 0,50")
+        ax.set_xlabel("Seuil de décision")
+        ax.set_ylabel("Score")
+        ax.set_title("Compromis précision/rappel selon le seuil (prédictions hors-pli)")
+        ax.grid(alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        return fig
 
     def plot_confusion_pair(
         self, y_true, y_pred, labels=("<=50K", ">50K"), figsize: tuple = (11, 4)

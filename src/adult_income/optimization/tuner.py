@@ -266,6 +266,36 @@ class HyperparameterTuner:
             score = self.studies[name].best_value
             print(f"{name:25s} | best {self.scoring}: {score:.4f} | params: {params}")
 
+    @staticmethod
+    def build_tuned_pipeline(pp, model_name: str, params: dict):
+        """Reconstruit un pipeline complet avec les meilleurs hyperparamètres.
+
+        ``pp`` est une ``PreprocessingPipeline`` déjà configurée ; ``params`` est
+        le dict ``best_params`` (issu de ``tune`` ou de ``load_best_params``).
+        """
+        from ..modeling.registry import ModelRegistry
+
+        estimator = ModelRegistry.get(model_name)
+        estimator.set_params(**params)
+        return pp.build_pipeline(estimator)
+
+    @staticmethod
+    def summary_table(best: dict[str, dict]):
+        """Tableau récapitulatif (modèle, score CV, n_trials) trié par score.
+
+        ``best`` est le dict renvoyé par :meth:`load_best_params` (JSON rechargé).
+        """
+        import pandas as pd
+
+        rows = [
+            {"model": name, "PR-AUC (CV)": info["best_value"], "n_trials": info["n_trials"]}
+            for name, info in best.items()
+        ]
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+        return df.sort_values("PR-AUC (CV)", ascending=False).reset_index(drop=True)
+
     # ------------------------------------------------------------------
     # Persistance
     # ------------------------------------------------------------------
