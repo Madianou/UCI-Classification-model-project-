@@ -9,6 +9,10 @@ Objectif : prédire si le revenu annuel d'un individu dépasse 50 K$ (classifica
 uv sync --group dev   # installe toutes les dépendances + jupyter
 ```
 
+```bash
+uv run streamlit run app/streamlit_app.py # lance l'app streamlit
+```
+
 ## Structure
 
 ```
