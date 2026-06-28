@@ -16,7 +16,7 @@ CLAUDE.md
 # Optuna persistence (bases SQLite + JSON des meilleurs params)
 artifacts/
 # garder uniquement les meilleurs params, pas la base Optuna
-!artifacts/optuna_ap/best_params.json
+!artifacts/optuna/best_params.json
 
 Projet8_0.ipynb
 

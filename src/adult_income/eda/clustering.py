@@ -187,7 +187,11 @@ class ClusteringAnalyzer:
         self.labels_ = self._kmeans.fit_predict(reduced)
         return self.labels_
 
-    def cluster_profile(self, numeric: list[str] | None = None) -> pd.DataFrame:
+    def cluster_profile(
+        self,
+        numeric: list[str] | None = None,
+        extra: dict[str, np.ndarray | pd.Series] | None = None,
+    ) -> pd.DataFrame:
         """Profil interprétable de chaque cluster (après :meth:`fit_kmeans`).
 
         Par cluster : effectif, part du total, **taux de >50K** (à comparer au
@@ -195,6 +199,12 @@ class ClusteringAnalyzer:
         variables numériques choisies, et modalité dominante des catégorielles
         les plus parlantes. Construit sur ``X`` *brut* (pas la matrice scalée)
         pour rester lisible.
+
+        ``extra`` injecte des colonnes additionnelles **moyennées par cluster**
+        à partir de vecteurs alignés positionnellement sur ``X`` (longueur =
+        ``len(self.X)``) — typiquement, en évaluation, le **taux d'erreur du
+        modèle** pour repérer les clusters « frontière » qui concentrent les
+        mauvaises prédictions.
         """
         if self.labels_ is None:
             raise RuntimeError("Appeler fit_kmeans(k) avant cluster_profile().")
@@ -209,6 +219,11 @@ class ClusteringAnalyzer:
             "pct": g.size() / len(prof) * 100,
             "taux_>50K (%)": g["_pos"].mean() * 100,
         })
+        for name, vec in (extra or {}).items():
+            out[name] = (
+                pd.Series(np.asarray(vec), index=prof.index)
+                .groupby(self.labels_).mean()
+            )
         for col in numeric:
             out[f"{col} (moy.)"] = g[col].mean()
         # Modalité dominante des catégorielles les plus interprétables.
@@ -261,40 +276,72 @@ class ClusteringAnalyzer:
         sample_size: int = 6000,
         perplexity: float = 30.0,
         figsize: tuple = (8, 7),
+        *,
+        values: np.ndarray | pd.Series | None = None,
+        value_labels: dict | None = None,
+        value_colors: dict | None = None,
+        legend_title: str | None = None,
+        title: str | None = None,
+        ax: plt.Axes | None = None,
     ) -> plt.Figure:
-        """Nuage t-SNE 2D colorié par ``income`` ou par cluster k-means.
+        """Nuage t-SNE 2D colorié par ``income``, par cluster ou par un vecteur.
 
         - ``color_by="income"`` : les deux classes forment-elles des régions
           séparées ? (lecture directe de la difficulté du problème de classif) ;
         - ``color_by="cluster"`` : validation croisée — si les clusters k-means
           coïncident avec des régions cohérentes du t-SNE, ils captent une vraie
-          structure. Nécessite :meth:`fit_kmeans` au préalable.
+          structure. Nécessite :meth:`fit_kmeans` au préalable ;
+        - ``color_by="custom"`` : colorie par ``values`` (vecteur **aligné
+          positionnellement** sur ``X``, longueur = ``len(self.X)``). Sert, en
+          phase d'évaluation, à projeter les **prédictions** ou les **erreurs**
+          du modèle sur la même carte t-SNE que les vraies classes.
+          ``value_labels`` / ``value_colors`` (dicts indexés par valeur)
+          personnalisent la légende et les couleurs.
 
         Réutilise l'embedding en cache s'il correspond au même ``sample_size``.
+        Passer ``ax`` pour dessiner dans une grille de sous-graphes existante.
         """
         if (self._tsne_emb is None or self._tsne_idx is None
                 or len(self._tsne_idx) != min(sample_size, len(self.Z))):
             self.tsne_embedding(sample_size, perplexity)
         emb, idx = self._tsne_emb, self._tsne_idx
 
-        fig, ax = plt.subplots(figsize=figsize)
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.figure
         if color_by == "income":
             for label, color in [("<=50K", "steelblue"), (">50K", "tomato")]:
                 m = self.y.to_numpy()[idx] == label
                 ax.scatter(emb[m, 0], emb[m, 1], s=6, alpha=0.5,
                            color=color, label=label)
-            ax.legend(title=TARGET, markerscale=2)
-            title = "t-SNE colorié par income"
+            ax.legend(title=legend_title or TARGET, markerscale=2)
+            title = title or "t-SNE colorié par income"
         elif color_by == "cluster":
             if self.labels_ is None:
                 raise RuntimeError("Appeler fit_kmeans(k) avant color_by='cluster'.")
             labels = self.labels_[idx]
             sc = ax.scatter(emb[:, 0], emb[:, 1], s=6, alpha=0.5,
                             c=labels, cmap="tab10")
-            ax.legend(*sc.legend_elements(), title="cluster", markerscale=2)
-            title = "t-SNE colorié par cluster k-means"
+            ax.legend(*sc.legend_elements(), title=legend_title or "cluster",
+                      markerscale=2)
+            title = title or "t-SNE colorié par cluster k-means"
+        elif color_by == "custom":
+            if values is None:
+                raise ValueError("color_by='custom' nécessite l'argument values.")
+            v = np.asarray(values)[idx]
+            palette = ["steelblue", "tomato", "seagreen", "goldenrod", "purple"]
+            for j, u in enumerate(np.unique(v)):
+                m = v == u
+                label = value_labels.get(u, str(u)) if value_labels else str(u)
+                color = (value_colors.get(u) if value_colors
+                         else palette[j % len(palette)])
+                ax.scatter(emb[m, 0], emb[m, 1], s=6, alpha=0.5,
+                           color=color, label=label)
+            ax.legend(title=legend_title, markerscale=2)
+            title = title or "t-SNE colorié (vecteur fourni)"
         else:
-            raise ValueError("color_by doit être 'income' ou 'cluster'")
+            raise ValueError("color_by doit être 'income', 'cluster' ou 'custom'")
 
         ax.set_xticks([])
         ax.set_yticks([])
