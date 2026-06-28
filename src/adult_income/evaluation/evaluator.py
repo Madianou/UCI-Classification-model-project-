@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     PrecisionRecallDisplay,
@@ -357,6 +358,53 @@ class ModelEvaluator:
         ax.legend()
         fig.tight_layout()
         return fig
+
+    def class_weight_comparison(
+        self, probes, X, y, threshold_metric: str = "f1"
+    ) -> pd.DataFrame:
+        """Effet de la pondération des classes, au seuil 0,50 ET au seuil réglé.
+
+        Chaque sonde déclare **son** levier de pondération, car les modèles ne
+        partagent pas le même paramètre (``class_weight`` pour les estimateurs
+        sklearn, ``scale_pos_weight`` pour XGBoost ; le boosting sklearn n'a que
+        ``sample_weight`` et n'est donc pas testable ici). Pour chaque sonde et
+        chaque valeur du levier, on calcule des probabilités **hors-pli** puis les
+        métriques au seuil par défaut (0,50) et au seuil maximisant
+        ``threshold_metric`` (réglé sur les mêmes probas hors-pli).
+
+        L'AP / ROC-AUC (classement) sont quasi insensibles à la pondération ;
+        l'effet se voit sur F1/recall **à seuil fixe** — et la comparaison
+        ``pondéré @0,50`` vs ``aucun @seuil*`` montre que la pondération fait
+        surtout ce que le réglage du seuil fait déjà.
+
+        Parameters
+        ----------
+        probes : list[dict]
+            Chaque dict = ``{"name": str, "pipeline": Pipeline, "param": str,
+            "values": dict[str, Any]}`` où ``values`` mappe un libellé vers la
+            valeur du paramètre (ex. ``{"aucun": None, "balanced": "balanced"}``).
+        """
+        rows = []
+        for spec in probes:
+            for label, value in spec["values"].items():
+                pipe = clone(spec["pipeline"])
+                pipe.set_params(**{spec["param"]: value})
+                proba = self.out_of_fold_probabilities(pipe, X, y)
+                m_def = self.metrics_at_threshold(y, proba, 0.50)
+                t_star, _ = self.find_best_threshold(y, proba, metric=threshold_metric)
+                m_tun = self.metrics_at_threshold(y, proba, t_star)
+                rows.append({
+                    "modèle": spec["name"],
+                    "pondération": label,
+                    "AP": m_def["average_precision"],
+                    "ROC_AUC": m_def["roc_auc"],
+                    "F1@0.50": m_def["f1"],
+                    "recall@0.50": m_def["recall"],
+                    "seuil*": t_star,
+                    "F1@seuil*": m_tun["f1"],
+                    "recall@seuil*": m_tun["recall"],
+                })
+        return pd.DataFrame(rows)
 
     def plot_confusion_pair(
         self, y_true, y_pred, labels=("<=50K", ">50K"), figsize: tuple = (11, 4)
