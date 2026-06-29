@@ -20,9 +20,9 @@ CATEGORICAL_FEATURES: list[str] = [
 
 ALL_FEATURES: list[str] = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 
-# Column order exactly as it appears in the raw UCI files (adult.data /
-# adult.test), which are headerless. This differs from ALL_FEATURES (which
-# groups numericals first); DataLoader uses it to name the CSV columns.
+# Ordre exact des colonnes dans les fichiers UCI bruts (adult.data /
+# adult.test), qui sont sans en-tête. Diffère de ALL_FEATURES (qui groupe les
+# numériques en premier) ; DataLoader s'en sert pour nommer les colonnes du CSV.
 RAW_COLUMNS: list[str] = [
     "age",
     "workclass",
@@ -41,8 +41,8 @@ RAW_COLUMNS: list[str] = [
     "income",
 ]
 
-# Human-readable descriptions for each column (keys match the hyphenated
-# dataset column names, not the underscore variants used elsewhere).
+# Descriptions lisibles de chaque colonne (les clés reprennent les noms du
+# dataset avec tirets, pas les variantes avec underscore utilisées ailleurs).
 FEATURE_DESCRIPTIONS: dict[str, str] = {
     "age": "Âge de l'individu",
     "workclass": "Type d'employeur ou statut professionnel",
@@ -62,45 +62,46 @@ FEATURE_DESCRIPTIONS: dict[str, str] = {
 }
 
 TARGET: str = "income"
-# Positive class after stripping whitespace/trailing dots
+# Classe positive après retrait des espaces / points finaux
 POSITIVE_CLASS: str = ">50K"
 NEGATIVE_CLASS: str = "<=50K"
 
-# Asymetric features with many outliers that may benefit from RobustScaler instead of StandardScaler
+# Variables asymétriques à nombreux outliers : RobustScaler plutôt que StandardScaler
 ASYMMETRIC_NUMERICAL_FEATURES: list[str] = ["capital-gain", "capital-loss"]
 
-# Dropped features (excluded from modelling, kept in the base lists above for EDA):
-# - "education" is redundant with "education-num"
-# - "fnlwgt" is a sampling weight that doesn't add predictive power
+# Variables supprimées (exclues de la modélisation, gardées dans les listes
+# ci-dessus pour l'AED) :
+# - "education" est redondante avec "education-num"
+# - "fnlwgt" est un poids d'échantillonnage sans pouvoir prédictif
 FEATURES_TO_DROP: list[str] = ["education", "fnlwgt"]
 
 # ----------------------------------------------------------------------
-# Derived feature groupings consumed by the preprocessing pipeline.
-# FEATURES_TO_DROP is applied here, so the base lists above stay complete
-# for exploratory data analysis while the pipeline only sees the kept ones.
+# Regroupements de variables dérivés, consommés par la pipeline de prétraitement.
+# FEATURES_TO_DROP est appliqué ici, donc les listes de base restent complètes
+# pour l'AED tandis que la pipeline ne voit que les variables conservées.
 # ----------------------------------------------------------------------
 
-# Numerical features scaled with StandardScaler (excludes asymmetric ones and dropped ones)
+# Numériques mises à l'échelle par StandardScaler (hors asymétriques et droppées)
 NORMAL_NUMERICAL_FEATURES: list[str] = [
     f for f in NUMERICAL_FEATURES
     if f not in ASYMMETRIC_NUMERICAL_FEATURES and f not in FEATURES_TO_DROP
 ]
 
 # ----------------------------------------------------------------------
-# EDA-aligned feature groupings (bilan §9 of the EDA notebook).
-# These refine the generic groupings above with per-feature decisions,
-# so the pipeline applies a tailored treatment instead of one-size-fits-all.
+# Regroupements alignés sur l'AED (bilan §9 du notebook d'AED).
+# Ils affinent les regroupements génériques ci-dessus par des décisions
+# par variable, pour un traitement sur mesure plutôt qu'uniforme.
 # ----------------------------------------------------------------------
 
-# capital-gain : kept via log1p + RobustScaler (the heavy tail is predictive)
+# capital-gain : conservée via log1p + RobustScaler (la queue lourde est prédictive)
 LOG_NUMERICAL_FEATURES: list[str] = ["capital-gain"]
 
-# capital-gain & capital-loss : binary has_* flag (zero-inflated "hurdle" part).
-# capital-loss gets ONLY this flag (its magnitude carries little extra signal);
-# capital-gain gets both the flag and the log1p column above.
+# capital-gain & capital-loss : indicateur binaire has_* (partie « hurdle » des
+# variables zero-inflated). capital-loss n'a QUE cet indicateur (sa magnitude
+# apporte peu) ; capital-gain a l'indicateur ET la colonne log1p ci-dessus.
 BINARY_NUMERICAL_FEATURES: list[str] = ["capital-gain", "capital-loss"]
 
-# Low-cardinality categoricals with no informative missingness -> mode + encode
+# Catégorielles à faible cardinalité, manquance non informative -> mode + encodage
 MODE_CATEGORICAL_FEATURES: list[str] = [
     "marital-status",
     "relationship",
@@ -108,15 +109,15 @@ MODE_CATEGORICAL_FEATURES: list[str] = [
     "sex",
 ]
 
-# Categoricals whose missingness is INFORMATIVE (~9.5% >50K vs 24% baseline):
-# keep the signal with a dedicated "Unknown" category instead of imputing.
-# Both are one-hot encoded (occupation's 15 modalities stay manageable).
+# Catégorielles dont la manquance est INFORMATIVE (~9,5 % de >50K vs 24 % de base) :
+# on garde le signal via une catégorie dédiée "Unknown" au lieu d'imputer.
+# Les deux sont encodées en one-hot (les 15 modalités d'occupation restent gérables).
 UNKNOWN_ONEHOT_FEATURES: list[str] = ["workclass", "occupation"]
 
-# High-cardinality, NON-informative missingness -> impute mode + group rare modalities
+# Forte cardinalité, manquance NON informative -> imputation mode + regroupement des rares
 GROUPED_CATEGORICAL_FEATURES: list[str] = ["native-country"]
 
-# Modalities with fewer than this many observations are grouped together.
-# Applied ONLY to native-country (~20 rare modalities), per the EDA bilan.
-# Every other categorical keeps all its modalities, even rare ones.
+# Les modalités sous ce nombre d'observations sont regroupées ensemble.
+# Appliqué UNIQUEMENT à native-country (~20 modalités rares), selon le bilan AED.
+# Toutes les autres catégorielles gardent leurs modalités, même rares.
 RARE_CATEGORY_MIN_FREQUENCY: int = 50

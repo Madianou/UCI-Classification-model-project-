@@ -14,7 +14,7 @@ from ..data.schemas import (
 
 
 class EDAAnalyzer:
-    """Exploratory data analysis for the Adult Income dataset."""
+    """Analyse exploratoire des données du dataset Adult Income."""
 
     def __init__(self, X: pd.DataFrame, y: pd.Series) -> None:
         self.X = X.copy()
@@ -27,10 +27,11 @@ class EDAAnalyzer:
     # ------------------------------------------------------------------
     
     def shape(self) -> tuple[int, int]:
+        """Dimensions (lignes, colonnes) des features."""
         return self.X.shape
 
     def variable_overview(self) -> pd.DataFrame:
-        """Per-column reference table: description, role, dtype, ML type, modalities."""
+        """Table de référence par colonne : description, rôle, dtype, type ML, modalités."""
         rows = []
         for col in self.df.columns:
             is_numerical = col in NUMERICAL_FEATURES
@@ -49,21 +50,23 @@ class EDAAnalyzer:
         return pd.DataFrame(rows)
 
     def missing_values(self) -> pd.DataFrame:
+        """Effectif et % de manquants par variable (seules celles qui en ont)."""
         missing = self.X.isnull().sum()
         pct = missing / len(self.X) * 100
         df = pd.DataFrame({"count": missing, "pct": pct})
         return df[df["count"] > 0].sort_values("count", ascending=False)
 
     def class_balance(self) -> pd.DataFrame:
+        """Effectif et pourcentage de chaque classe de la cible."""
         counts = self.y.value_counts()
         return pd.DataFrame({"count": counts, "pct": counts / len(self.y) * 100})
 
     def numerical_stats(self, by_class: bool = False) -> pd.DataFrame:
-        """describe() of the numerical features.
+        """describe() des variables numériques.
 
-        by_class=True breaks the statistics down per income class (bivariate),
-        so each feature's mean/median/std can be compared between <=50K and
-        >50K : a quick read of which variables separate the classes.
+        by_class=True ventile les statistiques par classe de revenu (bivarié),
+        pour comparer moyenne/médiane/écart-type de chaque variable entre <=50K
+        et >50K : lecture rapide des variables qui séparent les classes.
         """
         if not by_class:
             return self.X[NUMERICAL_FEATURES].describe().T
@@ -71,12 +74,12 @@ class EDAAnalyzer:
         return self.df.groupby(TARGET)[NUMERICAL_FEATURES].describe().T
 
     def numeric_target_correlation(self) -> pd.Series:
-        """Point-biserial correlation of each numerical feature with the target.
+        """Corrélation point-bisériale de chaque variable numérique avec la cible.
 
-        Equivalent to Pearson between the feature and the 0/1-encoded income, so
-        it captures the signed linear/monotonic link (positive = associated with
-        >50K). Linear only: it underestimates non-linear features such as
-        capital-gain : read it alongside the mutual information.
+        Équivalente à un Pearson entre la variable et le revenu encodé 0/1 :
+        capte le lien linéaire/monotone signé (positif = associé à >50K). Linéaire
+        seulement : sous-estime les variables non linéaires comme capital-gain,
+        à croiser avec les taux par modalité / distributions conditionnelles.
         """
         income_binary = (self.y == POSITIVE_CLASS).astype(int)
         return (
@@ -86,12 +89,13 @@ class EDAAnalyzer:
         )
 
     def categorical_stats(self, rare_threshold: float = 1.0) -> pd.DataFrame:
-        """Per categorical variable, a decision table for encoding choices.
+        """Table d'aide à la décision d'encodage, par variable catégorielle.
 
-        Adds to the basics (n_unique, top, missing):
-        - top_pct  : share of the dominant modality (flags near-constant vars);
-        - n_rare   : number of modalities below rare_threshold (%), candidates
-                     to group into an "Other" bucket.
+        En plus des bases (n_unique, top, missing) :
+        - top_pct : part de la modalité dominante (repère les variables quasi
+                    constantes) ;
+        - n_rare  : nombre de modalités sous rare_threshold (%), candidates à un
+                    regroupement dans un bac "Autres".
         """
         rows = []
         for col in CATEGORICAL_FEATURES:
@@ -113,11 +117,11 @@ class EDAAnalyzer:
     def _cramers_v_from_chi2(
         chi2: float, n: int, r: int, k: int, bias_correction: bool = True
     ) -> float:
-        """Cramér's V from a precomputed chi-square statistic and table shape.
+        """Cramér's V à partir d'un chi² déjà calculé et de la forme du tableau.
 
-        Shared by cramers_v (quali<->quali) and chi2_numeric_target (binned
-        quanti<->target), so the Bergsma (2013) bias correction lives in one
-        place.
+        Partagé par cramers_v (quali<->quali) et chi2_numeric_target (quanti
+        binné <->cible), pour que la correction de biais de Bergsma (2013) soit
+        définie à un seul endroit.
         """
         if not bias_correction:
             denom = n * min(k - 1, r - 1)
@@ -130,12 +134,12 @@ class EDAAnalyzer:
         return float(np.sqrt(phi2corr / denom)) if denom > 0 else 0.0
 
     def cramers_v(self, col_a: str, col_b: str, bias_correction: bool = True) -> float:
-        """Cramér's V association between two categorical columns, in [0, 1].
+        """Association de Cramér's V entre deux colonnes catégorielles, dans [0, 1].
 
-        0 = independent (every modality keeps the global split), 1 = perfect
-        association. Derived from the chi-square of their crosstab; with
-        bias_correction (Bergsma 2013) to avoid overestimation on small
-        samples / high cardinality.
+        0 = indépendance (chaque modalité garde la répartition globale), 1 =
+        association parfaite. Dérivée du chi² de leur tableau croisé ; avec
+        bias_correction (Bergsma 2013) pour éviter la surestimation sur petits
+        échantillons / forte cardinalité.
         """
         confusion = pd.crosstab(self.df[col_a], self.df[col_b])
         chi2 = stats.chi2_contingency(confusion)[0]
@@ -150,25 +154,24 @@ class EDAAnalyzer:
         binning: str = "quantile",
         bias_correction: bool = True,
     ) -> pd.DataFrame:
-        """Chi-square independence test between numerical feature(s) (binned)
-        and the categorical target, with Cramér's V as the effect size.
+        """Test d'indépendance du chi² entre variable(s) numérique(s) (binnée(s))
+        et la cible catégorielle, avec le Cramér's V comme taille d'effet.
 
-        The chi-square test needs categories, so each quantitative variable is
-        discretised first:
-        - binning="quantile" -> equal-sized bins (pd.qcut), robust to skew, so
-          every bin keeps enough observations for the chi-square expected-count
-          assumption (the right default for fnlwgt, age, hours-per-week);
-        - binning="uniform"  -> equal-width bins (pd.cut).
+        Le chi² a besoin de catégories, donc chaque variable quantitative est
+        d'abord discrétisée :
+        - binning="quantile" -> bacs de taille égale (pd.qcut), robuste à
+          l'asymétrie, chaque bac garde assez d'observations pour l'hypothèse
+          d'effectifs attendus du chi² (le bon défaut pour fnlwgt, age, hours) ;
+        - binning="uniform"  -> bacs de largeur égale (pd.cut).
 
-        At n~49k almost everything tests "significant", so always read p_value
-        together with cramers_v: e.g. fnlwgt comes out significant (p~1e-7) yet
-        with a negligible effect (Cramér's V~0.03) -> the drop decision holds.
-        "Significatif != important".
+        À n~49k presque tout ressort "significatif" : toujours lire p_value avec
+        cramers_v. Ex. fnlwgt est significatif (p~1e-7) mais d'effet négligeable
+        (Cramér's V~0,03) -> la décision de drop tient. "Significatif != important".
 
-        Returns one row per variable (chi2, p_value, dof, cramers_v, n_bins),
-        sorted by effect size. NB: heavily zero-inflated features
-        (capital-gain/loss) collapse to very few bins here -> prefer the
-        has_capital_* binary split for those.
+        Renvoie une ligne par variable (chi2, p_value, dof, cramers_v, n_bins),
+        triée par taille d'effet. NB : les variables très zero-inflated
+        (capital-gain/loss) s'effondrent en très peu de bacs ici -> préférer pour
+        elles l'indicateur binaire has_capital_*.
         """
         if variables is None:
             variables = NUMERICAL_FEATURES
@@ -182,7 +185,7 @@ class EDAAnalyzer:
             elif binning == "uniform":
                 binned = pd.cut(s, bins=n_bins)
             else:
-                raise ValueError("binning must be 'quantile' or 'uniform'")
+                raise ValueError("binning doit valoir 'quantile' ou 'uniform'")
             table = pd.crosstab(binned, self.y)
             chi2, p, dof, _ = stats.chi2_contingency(table)
             n = table.to_numpy().sum()
@@ -206,10 +209,10 @@ class EDAAnalyzer:
         )
 
     def cramers_v_matrix(self, include_target: bool = False) -> pd.DataFrame:
-        """Symmetric Cramér's V matrix between all categorical features.
+        """Matrice symétrique de Cramér's V entre toutes les catégorielles.
 
-        include_target=True adds the income target as a row/column, so its
-        column ranks the quali<->target association (the categorical analog of
+        include_target=True ajoute la cible income en ligne/colonne : sa colonne
+        classe l'association quali<->cible (l'analogue catégoriel de
         numeric_target_correlation).
         """
         cols = list(CATEGORICAL_FEATURES)
@@ -228,17 +231,18 @@ class EDAAnalyzer:
         head: int | None = None,
         dropna: bool = True,
     ) -> pd.DataFrame:
-        """>50K rate and count per modality, for one or several categorical
-        columns, sorted by rate (descending) within each variable.
+        """Taux de >50K et effectif par modalité, pour une ou plusieurs colonnes
+        catégorielles, trié par taux (décroissant) au sein de chaque variable.
 
-        - columns=None  -> every categorical feature;
-        - a single name -> a simple (modality-indexed) table;
-        - several names -> one combined MultiIndex (variable x modality) table,
-          to avoid printing many separate tables.
-        - head=N keeps only the N highest and N lowest rates per variable,
-          a compact view for high-cardinality variables (e.g. native-country).
-        - dropna=False keeps missing values as a "(Manquant)" modality, whose
-          rate can itself be informative (e.g. missing occupation -> mostly
+        - columns=None  -> toutes les variables catégorielles ;
+        - un seul nom   -> une table simple (indexée par modalité) ;
+        - plusieurs noms -> une table MultiIndex (variable x modalité) combinée,
+          pour éviter d'imprimer beaucoup de tables séparées.
+        - head=N ne garde que les N taux les plus hauts et N les plus bas par
+          variable : vue compacte pour les variables à forte cardinalité
+          (ex. native-country).
+        - dropna=False garde les manquants comme modalité "(Manquant)", dont le
+          taux peut lui-même être informatif (ex. occupation manquante -> surtout
           <=50K).
         """
         if columns is None:
@@ -266,11 +270,11 @@ class EDAAnalyzer:
         return pd.concat(parts, names=["variable", "modalité"])
 
     def outlier_stats(self, whisker: float = 1.5) -> pd.DataFrame:
-        """Per numerical feature, the IQR-rule outlier count, rate and bounds.
+        """Par variable numérique : nombre, taux et bornes des outliers (règle IQR).
 
-        A value is an outlier if it lies below Q1 - whisker*IQR or above
-        Q3 + whisker*IQR (whisker=1.5 is the standard boxplot rule). Sorted by
-        outlier rate, descending.
+        Une valeur est un outlier si elle est sous Q1 - whisker*IQR ou au-dessus
+        de Q3 + whisker*IQR (whisker=1.5 = règle standard du boxplot). Trié par
+        taux d'outliers décroissant.
         """
         rows = []
         for col in NUMERICAL_FEATURES:
@@ -295,32 +299,34 @@ class EDAAnalyzer:
         )
 
     def summary(self) -> None:
-        print(f"Dataset shape : {self.shape()}")
-        print(f"\nClass balance :\n{self.class_balance()}\n")
+        """Résumé console : dimensions, équilibre des classes, manquants, stats."""
+        print(f"Dimensions du dataset : {self.shape()}")
+        print(f"\nÉquilibre des classes :\n{self.class_balance()}\n")
         mv = self.missing_values()
         if mv.empty:
-            print("No missing values detected.")
+            print("Aucune valeur manquante détectée.")
         else:
-            print(f"Missing values :\n{mv}\n")
-        print(f"\nNumerical statistics :\n{self.numerical_stats()}")
+            print(f"Valeurs manquantes :\n{mv}\n")
+        print(f"\nStatistiques numériques :\n{self.numerical_stats()}")
 
     # ------------------------------------------------------------------
-    # Plots
+    # Graphiques
     # ------------------------------------------------------------------
 
     def plot_class_balance(self, figsize: tuple = (12, 4)) -> plt.Figure:
+        """Équilibre de la cible : barres (effectifs) + camembert (pourcentages)."""
         cb = self.class_balance()
         colors = ["steelblue", "tomato"]
         fig, (ax_bar, ax_pie) = plt.subplots(1, 2, figsize=figsize)
 
-        # Left: raw counts
+        # Gauche : effectifs bruts
         ax_bar.bar(cb.index, cb["count"], color=colors)
         ax_bar.set_xlabel(TARGET)
-        ax_bar.set_ylabel("count")
+        ax_bar.set_ylabel("effectif")
         for i, count in enumerate(cb["count"]):
             ax_bar.text(i, count, f"{count:,}", ha="center", va="bottom")
 
-        # Right: percentage breakdown
+        # Droite : répartition en pourcentages
         ax_pie.pie(
             cb["count"], labels=cb.index, colors=colors,
             autopct="%1.1f%%", startangle=90, counterclock=False,
@@ -337,13 +343,14 @@ class EDAAnalyzer:
         filter_positive: bool = False,
         figsize: tuple | None = None,
     ) -> plt.Figure:
-        """Bivariate view of numerical variable(s) vs the income class: one row
-        per variable with the distribution (left) and a boxplot by class
-        (right). Discrete variables get integer-aligned bins and no KDE.
+        """Vue bivariée des variable(s) numérique(s) vs la classe de revenu : une
+        ligne par variable avec la distribution (gauche) et un boxplot par classe
+        (droite). Les variables discrètes ont des bacs alignés sur les entiers,
+        sans KDE.
 
-        variable=None plots every numerical feature; pass a name to plot just
-        one. filter_positive=True keeps only strictly positive values (useful
-        for the zero-inflated capital features), applied per variable.
+        variable=None trace toutes les numériques ; passez un nom pour n'en
+        tracer qu'une. filter_positive=True ne garde que les valeurs strictement
+        positives (utile pour les capital zero-inflated), appliqué par variable.
         """
         palette = {"<=50K": "steelblue", ">50K": "tomato"}
         variables = [variable] if variable is not None else NUMERICAL_FEATURES
@@ -357,14 +364,14 @@ class EDAAnalyzer:
             bins = np.arange(s.min() - 0.5, s.max() + 1.5, 1) if is_discrete else 30
             suffix = " (valeurs > 0)" if filter_positive else ""
 
-            # Left: distribution split by income class
+            # Gauche : distribution ventilée par classe de revenu
             sns.histplot(data=sub, x=col, hue=TARGET, bins=bins,
                          kde=not is_discrete, palette=palette, ax=axes[i, 0])
             axes[i, 0].set_title(f"Distribution de {col} selon le revenu{suffix}",
                                  fontweight="bold")
             axes[i, 0].set_ylabel("Nombre de personnes")
 
-            # Right: boxplot per income class
+            # Droite : boxplot par classe de revenu
             sns.boxplot(data=sub, x=TARGET, y=col, hue=TARGET,
                         palette=palette, legend=False, ax=axes[i, 1])
             axes[i, 1].set_title(f"Boxplot de {col} selon le revenu{suffix}",
@@ -384,21 +391,21 @@ class EDAAnalyzer:
         bins: int = 30,
         kde: bool | None = None,
     ) -> plt.Figure:
-        """Univariate diagnostics for one numerical variable, side by side:
-        distribution (hist + KDE), boxplot, and normal QQ-plot.
+        """Diagnostics univariés d'une variable numérique, côte à côte :
+        distribution (hist + KDE), boxplot et QQ-plot normal.
 
-        filter_positive=True keeps only strictly positive values, useful for the
-        zero-inflated features (capital-gain, capital-loss) whose zero spike
-        otherwise hides the shape of the actual values.
+        filter_positive=True ne garde que les valeurs strictement positives,
+        utile pour les variables zero-inflated (capital-gain, capital-loss) dont
+        le pic à zéro masque sinon la forme des valeurs réelles.
         """
         title = title or variable
         data = self.df[variable].dropna()
         if filter_positive:
             data = data[data > 0]
 
-        # Discrete integer variables (e.g. education-num) need one bin per value,
-        # otherwise fixed bins leave empty gaps between integers ("comb" effect).
-        # The KDE also assumes continuity, so we drop it in that case.
+        # Les variables entières discrètes (ex. education-num) ont besoin d'un bac
+        # par valeur, sinon des bacs fixes laissent des trous entre entiers (effet
+        # "peigne"). Le KDE suppose aussi la continuité : on le retire dans ce cas.
         is_discrete = data.nunique() <= 25 and np.all(data == data.round())
         if is_discrete:
             bins_arg = np.arange(data.min() - 0.5, data.max() + 1.5, 1)
@@ -419,7 +426,7 @@ class EDAAnalyzer:
         axes[1].set_title(f"Boxplot - {title}", fontweight="bold")
         axes[1].set_xlabel(title)
 
-        # 3. QQ-plot (normality check)
+        # 3. QQ-plot (vérification de la normalité)
         stats.probplot(data, dist="norm", plot=axes[2])
         axes[2].set_title(f"QQ-plot - {title}", fontweight="bold")
 
@@ -430,10 +437,10 @@ class EDAAnalyzer:
         return fig
 
     def zero_proportion(self, variables: list[str] | None = None) -> pd.DataFrame:
-        """Univariate: overall % of zero vs non-zero values per variable.
+        """Univarié : % global de valeurs nulles vs non nulles par variable.
 
-        For zero-inflated features (capital-gain, capital-loss), quantifies how
-        dominant the zero spike is, without any split on the target.
+        Pour les variables zero-inflated (capital-gain, capital-loss), quantifie
+        la domination du pic à zéro, sans aucune ventilation par la cible.
         """
         variables = variables or ["capital-gain", "capital-loss"]
         rows = {}
@@ -447,12 +454,12 @@ class EDAAnalyzer:
         variables: list[str] | None = None,
         figsize: tuple = (8, 4),
     ) -> plt.Figure:
-        """Univariate: horizontal stacked bar of zero vs non-zero share per
-        variable (no target split)."""
+        """Univarié : barre horizontale empilée part nulle vs non nulle par
+        variable (sans ventilation par la cible)."""
         prop = self.zero_proportion(variables)
         fig, ax = plt.subplots(figsize=figsize)
         prop.plot(kind="barh", stacked=True, ax=ax, color=["lightgrey", "tomato"])
-        ax.set_xlabel("% of rows")
+        ax.set_xlabel("% des lignes")
         ax.set_xlim(0, 100)
         ax.legend(loc="lower right", fontsize=8)
         for i, nonzero in enumerate(prop["> 0"]):
@@ -467,13 +474,13 @@ class EDAAnalyzer:
         variables: list[str] | None = None,
         normalize: bool = True,
     ) -> pd.DataFrame:
-        """Bivariate: within each income class, zero vs non-zero breakdown for
-        each variable (MultiIndex variable x income class).
+        """Bivarié : au sein de chaque classe de revenu, répartition nul vs non
+        nul pour chaque variable (MultiIndex variable x classe de revenu).
 
-        normalize=True returns row percentages (% within class); normalize=False
-        returns raw counts. Designed for zero-inflated features (capital-gain,
-        capital-loss): the gap between classes on the "> 0" column is where the
-        discriminative signal lives.
+        normalize=True renvoie des pourcentages par ligne (% dans la classe) ;
+        normalize=False renvoie les effectifs bruts. Pensé pour les variables
+        zero-inflated (capital-gain, capital-loss) : l'écart entre classes sur la
+        colonne "> 0" est là où vit le signal discriminant.
         """
         variables = variables or ["capital-gain", "capital-loss"]
         parts = {}
@@ -492,8 +499,8 @@ class EDAAnalyzer:
         variables: list[str] | None = None,
         figsize: tuple = (12, 4),
     ) -> plt.Figure:
-        """Stacked bars of zero vs non-zero share per income class, one panel
-        per variable (defaults to the zero-inflated capital features)."""
+        """Barres empilées part nulle vs non nulle par classe de revenu, un
+        panneau par variable (par défaut les variables capital zero-inflated)."""
         variables = variables or ["capital-gain", "capital-loss"]
         table = self.zero_proportion_by_class(variables)
         fig, axes = plt.subplots(1, len(variables), figsize=figsize, squeeze=False)
@@ -502,10 +509,10 @@ class EDAAnalyzer:
             ct.plot(kind="bar", stacked=True, ax=ax,
                     color=["lightgrey", "tomato"], rot=0)
             ax.set_title(var)
-            ax.set_ylabel("% within class")
+            ax.set_ylabel("% dans la classe")
             ax.set_xlabel(TARGET)
             ax.legend(title=var, fontsize=8, loc="lower right")
-            # Annotate the non-zero share (the discriminative part)
+            # Annote la part non nulle (la partie discriminante)
             for i, nonzero in enumerate(ct["> 0"]):
                 ax.text(i, 100 - nonzero / 2, f"{nonzero:.1f}%",
                         ha="center", va="center", fontsize=9, fontweight="bold")
@@ -518,13 +525,13 @@ class EDAAnalyzer:
         top_n: int = 10,
         figsize: tuple = (18, 22),
     ) -> plt.Figure:
-        """Univariate distribution of each categorical variable.
+        """Distribution univariée de chaque variable catégorielle.
 
-        Horizontal sorted bars (best for long labels and dominant modalities).
-        For high-cardinality variables (native-country, occupation, education),
-        only the top_n modalities are shown and the rest are aggregated into an
-        "Autres (k)" bar. Missing values appear as their own "(Manquant)" bar.
-        Bars are annotated with the percentage of rows.
+        Barres horizontales triées (idéal pour labels longs et modalités
+        dominantes). Pour les variables à forte cardinalité (native-country,
+        occupation, education), seules les top_n modalités sont affichées, le
+        reste étant agrégé dans une barre "Autres (k)". Les manquants ont leur
+        propre barre "(Manquant)". Les barres sont annotées du % de lignes.
         """
         n_cols = 2
         n_rows = int(np.ceil(len(CATEGORICAL_FEATURES) / n_cols))
@@ -537,14 +544,14 @@ class EDAAnalyzer:
                 head = vc.iloc[:top_n].copy()
                 head[f"Autres ({n_grouped})"] = vc.iloc[top_n:].sum()
                 vc = head
-            vc = vc.iloc[::-1]  # largest on top for horizontal bars
+            vc = vc.iloc[::-1]  # la plus grande en haut pour les barres horizontales
             ax.barh(vc.index.astype(str), vc.values, color="steelblue")
             for j, count in enumerate(vc.values):
                 ax.text(count, j, f" {count / total * 100:.1f}%",
                         va="center", fontsize=8)
             ax.set_title(f"{col} ({self.X[col].nunique()} modalités)")
-            ax.set_xlabel("count")
-            ax.margins(x=0.12)  # room for the % labels
+            ax.set_xlabel("effectif")
+            ax.margins(x=0.12)  # place pour les étiquettes %
         for ax in axes.flat[len(CATEGORICAL_FEATURES):]:
             ax.set_visible(False)
         fig.suptitle("Distribution des variables catégorielles", y=1.005,
@@ -553,11 +560,13 @@ class EDAAnalyzer:
         return fig
 
     def plot_categorical_bivariate(self, figsize: tuple = (20, 18)) -> plt.Figure:
+        """Taux de >50K par modalité de chaque catégorielle, avec la ligne moyenne."""
         n_cols = 2
         n_rows = int(np.ceil(len(CATEGORICAL_FEATURES) / n_cols))
         fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-        # Global >50K rate: a modality above this line over-represents high
-        # income, below it under-represents it. Far from the line = strong signal.
+        # Taux global de >50K : une modalité au-dessus de cette ligne sur-représente
+        # les hauts revenus, en-dessous elle les sous-représente. Loin de la ligne
+        # = signal fort.
         baseline = (self.y == POSITIVE_CLASS).mean() * 100
         for ax, col in zip(axes.flat, CATEGORICAL_FEATURES):
             ct = pd.crosstab(self.X[col], self.y, normalize="index") * 100
@@ -566,15 +575,16 @@ class EDAAnalyzer:
             ax.axhline(baseline, ls="--", color="tomato", lw=1.2,
                        label=f"moy. {POSITIVE_CLASS} ({baseline:.1f}%)")
             ax.set_title(col)
-            ax.set_ylabel("% within category")
+            ax.set_ylabel("% dans la catégorie")
             ax.legend(fontsize=7, loc="upper right")
         for ax in axes.flat[len(CATEGORICAL_FEATURES):]:
             ax.set_visible(False)
-        fig.suptitle("Income rate per category", y=1.02)
+        fig.suptitle("Taux de revenu par catégorie", y=1.02)
         fig.tight_layout()
         return fig
 
     def plot_correlation_matrix(self, figsize: tuple = (10, 8)) -> plt.Figure:
+        """Heatmap des corrélations de Pearson entre variables numériques."""
         corr = self.X[NUMERICAL_FEATURES].corr()
         fig, ax = plt.subplots(figsize=figsize)
         sns.heatmap(
@@ -582,15 +592,15 @@ class EDAAnalyzer:
             center=0, ax=ax, square=True, linewidths=0.5,
             mask=np.triu(np.ones_like(corr, dtype=bool)),
         )
-        ax.set_title("Numerical feature correlations")
+        ax.set_title("Corrélations entre variables numériques")
         fig.tight_layout()
         return fig
 
     def plot_cramers_v_matrix(
         self, include_target: bool = False, figsize: tuple = (9, 7)
     ) -> plt.Figure:
-        """Heatmap of the Cramér's V matrix between categorical features
-        (optionally including the target column)."""
+        """Heatmap de la matrice de Cramér's V entre variables catégorielles
+        (en incluant éventuellement la colonne cible)."""
         mat = self.cramers_v_matrix(include_target=include_target)
         fig, ax = plt.subplots(figsize=figsize)
         sns.heatmap(
@@ -609,12 +619,13 @@ class EDAAnalyzer:
         normalize: str | None = "index",
         figsize: tuple = (10, 7),
     ) -> plt.Figure:
-        """Heatmap of the contingency table between two categorical features.
+        """Heatmap du tableau de contingence entre deux variables catégorielles.
 
-        normalize="index" -> row-conditional P(col_b | col_a) in %, the clearest
-        way to read which modality of col_a maps to which of col_b (e.g. how
-        marital-status maps onto relationship). normalize=None -> raw counts.
-        Complements cramers_v: the V says how strong, this shows where.
+        normalize="index" -> P(col_b | col_a) conditionnelle par ligne en %, la
+        façon la plus claire de lire quelle modalité de col_a correspond à quelle
+        modalité de col_b (ex. comment marital-status se projette sur
+        relationship). normalize=None -> effectifs bruts. Complète cramers_v : le
+        V dit la force, ceci montre où.
         """
         norm = normalize or False
         ct = pd.crosstab(self.df[col_a], self.df[col_b], normalize=norm)
@@ -638,12 +649,13 @@ class EDAAnalyzer:
         figsize: tuple = (10, 5),
         verbose: bool = True,
     ) -> plt.Figure:
-        """Overlay the >50K rate computed by cat_col (categorical) and by
-        num_col (numeric), to prove the two encodings define identical groups.
+        """Superpose le taux de >50K calculé par cat_col (catégoriel) et par
+        num_col (numérique), pour prouver que les deux encodages définissent des
+        groupes identiques.
 
-        The curves coincide because each cat_col modality maps to exactly one
-        num_col value. With verbose=True, also prints the two rate vectors and
-        whether they are equal.
+        Les courbes coïncident car chaque modalité de cat_col correspond à
+        exactement une valeur de num_col. Avec verbose=True, affiche aussi les
+        deux vecteurs de taux et s'ils sont égaux.
         """
         order = self.df.groupby(cat_col)[num_col].first().sort_values().index
         rc = (self.df.groupby(cat_col)[TARGET]
@@ -674,15 +686,16 @@ class EDAAnalyzer:
         return fig
 
     def plot_missing_values(self, figsize: tuple = (8, 4)) -> plt.Figure:
+        """Barres horizontales du pourcentage de manquants par variable."""
         mv = self.missing_values()
         if mv.empty:
             fig, ax = plt.subplots(figsize=(4, 2))
-            ax.text(0.5, 0.5, "No missing values", ha="center", va="center",
+            ax.text(0.5, 0.5, "Aucune valeur manquante", ha="center", va="center",
                     transform=ax.transAxes, fontsize=14)
             return fig
         fig, ax = plt.subplots(figsize=figsize)
         ax.barh(mv.index, mv["pct"])
-        ax.set_xlabel("Missing (%)")
-        ax.set_title("Missing values per feature")
+        ax.set_xlabel("Manquants (%)")
+        ax.set_title("Valeurs manquantes par variable")
         fig.tight_layout()
         return fig

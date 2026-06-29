@@ -17,11 +17,11 @@ from xgboost import XGBClassifier
 
 
 def _make_knn_pca() -> Pipeline:
-    """KNN preceded by a PCA(20) to fight the curse of dimensionality.
+    """KNN précédé d'une PCA(20) pour contrer le fléau de la dimension.
 
-    The PCA lives inside the estimator so it is refit on each CV fold (no
-    leakage). Input is dense (the preprocessor's OneHot uses sparse_output=False).
-    Compared against the plain ``knn`` to measure what the PCA step actually buys.
+    La PCA est dans l'estimateur, donc réajustée à chaque pli de CV (pas de
+    fuite). L'entrée est dense (le one-hot du preprocessor a sparse_output=False).
+    Comparé au ``knn`` simple pour mesurer l'apport réel de l'étape PCA.
     """
     return Pipeline(
         [
@@ -32,7 +32,7 @@ def _make_knn_pca() -> Pipeline:
 
 
 def _make_stacking() -> StackingClassifier:
-    """Stacking of three complementary families with a logistic meta-model."""
+    """Stacking de trois familles complémentaires + méta-modèle logistique."""
     return StackingClassifier(
         estimators=[
             ("logistic", LogisticRegression(max_iter=1000, random_state=42)),
@@ -45,7 +45,7 @@ def _make_stacking() -> StackingClassifier:
 
 
 _CATALOGUE: dict[str, type] = {
-    # Trivial baseline (floor): always predicts the majority class.
+    # Référence triviale (plancher) : prédit toujours la classe majoritaire.
     "dummy": lambda: DummyClassifier(strategy="most_frequent"),
     "logistic_regression": lambda: LogisticRegression(max_iter=1000, random_state=42),
     "decision_tree": lambda: DecisionTreeClassifier(random_state=42),
@@ -72,24 +72,26 @@ _CATALOGUE: dict[str, type] = {
 
 
 class ModelRegistry:
-    """Central catalogue of all classifiers used in the project."""
+    """Catalogue central de tous les classifieurs du projet."""
 
     @classmethod
     def available(cls) -> list[str]:
+        """Noms de tous les modèles du catalogue."""
         return list(_CATALOGUE)
 
     @classmethod
     def get(cls, name: str) -> BaseEstimator:
-        """Return a fresh (unfitted) estimator by name."""
+        """Renvoie une instance neuve (non entraînée) du modèle nommé."""
         if name not in _CATALOGUE:
-            raise ValueError(f"Unknown model {name!r}. Available: {cls.available()}")
+            raise ValueError(f"Modèle inconnu {name!r}. Disponibles : {cls.available()}")
         return _CATALOGUE[name]()
 
     @classmethod
     def get_all(cls) -> dict[str, BaseEstimator]:
-        """Return one fresh instance per registered model."""
+        """Renvoie une instance neuve par modèle enregistré."""
         return {name: _CATALOGUE[name]() for name in _CATALOGUE}
 
     @classmethod
     def get_subset(cls, names: list[str]) -> dict[str, BaseEstimator]:
+        """Renvoie une instance neuve pour chaque nom de modèle demandé."""
         return {name: cls.get(name) for name in names}

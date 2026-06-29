@@ -10,9 +10,6 @@ __pycache__/
 # OS
 .DS_Store
 
-# Working notes for the AI assistant
-CLAUDE.md
-
 # Optuna persistence (bases SQLite + JSON des meilleurs params)
 artifacts/
 # garder uniquement les meilleurs params, pas la base Optuna

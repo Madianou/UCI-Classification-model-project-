@@ -25,29 +25,29 @@ from ..data.schemas import (
 
 class PreprocessingPipeline:
     """
-    Builds a sklearn ColumnTransformer for the Adult dataset.
+    Construit un ColumnTransformer sklearn pour le dataset Adult.
 
-    All categorical features are one-hot encoded; this single encoding works
-    for every model in the project.
+    Toutes les catégorielles sont encodées en one-hot ; cet encodage unique
+    convient à tous les modèles du projet.
 
-    Parameters
+    Paramètres
     ----------
     scaling : bool
-        Apply StandardScaler to the normal numerical features (needed for LR,
-        SVM, KNN) and RobustScaler to the log1p'd capital-gain. Harmless for
-        tree-based models, which are scale-invariant.
+        Applique StandardScaler aux numériques normales (nécessaire pour LR,
+        SVM, KNN) et RobustScaler au capital-gain log1p'é. Sans effet pour les
+        modèles à arbres, invariants à l'échelle.
 
-    The next three flags keep the EDA-bilan choices by default; they exist to
-    run preprocessing **ablations** (one factor at a time):
+    Les trois flags suivants gardent les choix du bilan AED par défaut ; ils
+    servent aux **ablations** du prétraitement (un facteur à la fois) :
 
     drop_fnlwgt : bool
-        True (default) drops fnlwgt; False keeps it as a scaled numeric.
+        True (défaut) supprime fnlwgt ; False la garde comme numérique scalée.
     unknown_category : bool
-        True (default) keeps a dedicated "Unknown" category for the informative
-        missingness of workclass/occupation; False imputes them by the mode.
+        True (défaut) garde une catégorie dédiée "Unknown" pour la manquance
+        informative de workclass/occupation ; False les impute par le mode.
     capital_treatment : "hurdle" | "naive"
-        "hurdle" (default) = log1p(capital-gain) + has_* binary flags ;
-        "naive" = capital-gain/loss as plain scaled numerics (no log, no flag).
+        "hurdle" (défaut) = log1p(capital-gain) + indicateurs binaires has_* ;
+        "naive" = capital-gain/loss en simples numériques scalées (ni log, ni flag).
     """
 
     def __init__(
@@ -58,7 +58,7 @@ class PreprocessingPipeline:
         capital_treatment: str = "hurdle",
     ) -> None:
         if capital_treatment not in {"hurdle", "naive"}:
-            raise ValueError("capital_treatment must be 'hurdle' or 'naive'")
+            raise ValueError("capital_treatment doit valoir 'hurdle' ou 'naive'")
         self.scaling = scaling
         self.drop_fnlwgt = drop_fnlwgt
         self.unknown_category = unknown_category
@@ -67,20 +67,20 @@ class PreprocessingPipeline:
         self._label_encoder = LabelEncoder()
 
     # ------------------------------------------------------------------
-    # Preprocessor (features)
+    # Preprocessor (variables)
     # ------------------------------------------------------------------
 
     def build(self) -> ColumnTransformer:
-        """Return a fitted-ready ColumnTransformer.
+        """Renvoie un ColumnTransformer prêt à être ajusté.
 
-        Branches follow the EDA bilan by default; the constructor flags
-        (``drop_fnlwgt``, ``unknown_category``, ``capital_treatment``) toggle
-        the debatable choices for ablation studies.
+        Les branches suivent le bilan AED par défaut ; les flags du constructeur
+        (``drop_fnlwgt``, ``unknown_category``, ``capital_treatment``) basculent
+        les choix discutables pour les études d'ablation.
         """
 
-        # --- Numerical -------------------------------------------------
-        # Normal numerics: median impute + StandardScaler. fnlwgt joins this
-        # branch when kept, and so do capital-* in the "naive" mode.
+        # --- Numériques ------------------------------------------------
+        # Numériques normales : imputation médiane + StandardScaler. fnlwgt
+        # rejoint cette branche si conservée, de même que capital-* en mode "naive".
         normal_features = list(NORMAL_NUMERICAL_FEATURES)
         if not self.drop_fnlwgt:
             normal_features.append("fnlwgt")
@@ -95,7 +95,7 @@ class PreprocessingPipeline:
         )
         transformers = [("num", normal_num, normal_features)]
 
-        # capital-* "hurdle" decomposition: log1p(capital-gain) + has_* flags.
+        # Décomposition "hurdle" de capital-* : log1p(capital-gain) + flags has_*.
         if self.capital_treatment == "hurdle":
             log_num = Pipeline(
                 [
@@ -123,24 +123,24 @@ class PreprocessingPipeline:
                 ("num_bin", binary_num, BINARY_NUMERICAL_FEATURES),
             ]
 
-        # --- Categorical ----------------------------------------------
-        # Low-cardinality, no informative missingness: mode impute + encode.
+        # --- Catégorielles ---------------------------------------------
+        # Faible cardinalité, manquance non informative : imputation mode + encodage.
         cat_mode = Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="most_frequent")),
                 ("encoder", self._make_cat_encoder()),
             ]
         )
-        # workclass & occupation: informative missingness -> "Unknown" category
-        # (or mode in the ablation variant via ``unknown_category=False``) + OneHot.
+        # workclass & occupation : manquance informative -> catégorie "Unknown"
+        # (ou mode dans la variante d'ablation via ``unknown_category=False``) + OneHot.
         cat_unknown_onehot = Pipeline(
             [
                 ("imputer", self._missing_imputer()),
                 ("encoder", self._make_cat_encoder()),
             ]
         )
-        # native-country: non-informative missingness -> mode impute; ~20 rare
-        # modalities grouped together (min_frequency = RARE_CATEGORY_MIN_FREQUENCY).
+        # native-country : manquance non informative -> imputation mode ; ~20
+        # modalités rares regroupées (min_frequency = RARE_CATEGORY_MIN_FREQUENCY).
         cat_grouped = Pipeline(
             [
                 ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -159,21 +159,21 @@ class PreprocessingPipeline:
         return self._preprocessor
 
     def _missing_imputer(self) -> SimpleImputer:
-        """Imputer for the informative-missingness columns (workclass/occupation).
+        """Imputeur des colonnes à manquance informative (workclass/occupation).
 
-        Dedicated "Unknown" category by default; mode imputation in the ablation.
+        Catégorie dédiée "Unknown" par défaut ; imputation mode dans l'ablation.
         """
         if self.unknown_category:
             return SimpleImputer(strategy="constant", fill_value="Unknown")
         return SimpleImputer(strategy="most_frequent")
 
     def _make_cat_encoder(self, min_frequency: int | None = None):
-        """One-hot encoder for categoricals.
+        """Encodeur one-hot pour les catégorielles.
 
-        ``min_frequency`` groups rare modalities together; left at ``None``
-        every modality keeps its own column (only native-country opts in to
-        grouping, per the EDA bilan). ``infrequent_if_exist`` still protects
-        against unseen categories at transform time even without grouping.
+        ``min_frequency`` regroupe les modalités rares ; laissé à ``None``,
+        chaque modalité garde sa colonne (seule native-country active le
+        regroupement, selon le bilan AED). ``infrequent_if_exist`` protège tout
+        de même contre les catégories inédites au transform, même sans regroupement.
         """
         return OneHotEncoder(
             handle_unknown="infrequent_if_exist",
@@ -183,37 +183,37 @@ class PreprocessingPipeline:
 
     @staticmethod
     def _has_feature_names(transformer, input_features) -> np.ndarray:
-        """Name binary flag columns has_<feature>."""
+        """Nomme les colonnes d'indicateur binaire has_<variable>."""
         return np.asarray([f"has_{name}" for name in input_features], dtype=object)
 
     @staticmethod
     def binarize_positive(df: pd.DataFrame) -> pd.DataFrame:
-        """Return 1.0 where the value is strictly positive, else 0.0.
+        """Renvoie 1.0 si la valeur est strictement positive, sinon 0.0.
 
-        Used for the zero-inflated capital-* features: captures the
-        has-any-gain/loss signal independently of the magnitude.
+        Utilisé pour les variables zero-inflated capital-* : capte le signal
+        gain/perte non nul indépendamment de la magnitude.
         """
         return (df > 0).astype(float)
 
     def plot_capital_treatment(
         self, X_raw: pd.DataFrame, X_transformed: pd.DataFrame
     ) -> tuple:
-        """Verification plot of the capital-* "hurdle" decomposition.
+        """Graphe de vérification de la décomposition "hurdle" de capital-*.
 
-        Left panel  : raw capital-gain (log y-scale, zero-inflated heavy tail).
-        Right panel : the log1p + RobustScaler output -> same magnitude ordering
-        with a compressed tail. Also returns the share of non-zero
-        capital-gain/loss captured by the has_* flags.
+        Panneau gauche : capital-gain brut (axe y log, queue lourde zero-inflated).
+        Panneau droit  : la sortie log1p + RobustScaler -> même ordre de magnitude
+        avec une queue compressée. Renvoie aussi la part de capital-gain/loss non
+        nul captée par les flags has_*.
 
-        Requires ``capital_treatment="hurdle"`` (the transformed frame must hold
-        the ``num_log__`` / ``num_bin__`` columns). Returns ``(fig, proportions)``.
+        Requiert ``capital_treatment="hurdle"`` (la matrice transformée doit
+        contenir les colonnes ``num_log__`` / ``num_bin__``). Renvoie ``(fig, proportions)``.
         """
         import matplotlib.pyplot as plt
         import seaborn as sns
 
         if self.capital_treatment != "hurdle":
             raise ValueError(
-                "plot_capital_treatment requires capital_treatment='hurdle'"
+                "plot_capital_treatment requiert capital_treatment='hurdle'"
             )
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -235,7 +235,7 @@ class PreprocessingPipeline:
         return fig, proportions
 
     def build_pipeline(self, estimator: BaseEstimator) -> Pipeline:
-        """Compose the preprocessor with a classifier into a full Pipeline."""
+        """Compose le preprocessor et un classifieur en une Pipeline complète."""
         preprocessor = self.build()
         return Pipeline(
             [
@@ -245,14 +245,15 @@ class PreprocessingPipeline:
         )
 
     # ------------------------------------------------------------------
-    # Target encoding
+    # Encodage de la cible
     # ------------------------------------------------------------------
 
     def fit_transform_target(self, y: pd.Series) -> np.ndarray:
-        """Fit LabelEncoder on y and return encoded array."""
+        """Ajuste le LabelEncoder sur y et renvoie le tableau encodé."""
         return self._label_encoder.fit_transform(y)
 
     def transform_target(self, y: pd.Series) -> np.ndarray:
+        """Encode y avec le LabelEncoder déjà ajusté."""
         return self._label_encoder.transform(y)
 
     @property

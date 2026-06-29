@@ -36,20 +36,20 @@ _SCORING = {
 
 class ModelEvaluator:
     """
-    Cross-validation, test-set evaluation, and comparison plots.
+    Validation croisée, évaluation sur le test et graphiques de comparaison.
 
-    Usage
-    -----
+    Utilisation
+    -----------
     evaluator = ModelEvaluator(cv=5)
 
-    # Cross-validation (before test)
+    # Validation croisée (avant le test)
     evaluator.cross_validate("xgboost", pipeline, X_train, y_train)
 
-    # Final evaluation on held-out test set
+    # Évaluation finale sur le test mis de côté
     evaluator.evaluate_on_test("xgboost", pipeline, X_train, y_train, X_test, y_test)
 
-    # Comparison table
-    evaluator.comparison_table()
+    # Tableau de comparaison
+    evaluator.cv_comparison_table()
     """
 
     def __init__(self, cv: int = 5, random_state: int = 42) -> None:
@@ -63,7 +63,7 @@ class ModelEvaluator:
     # ------------------------------------------------------------------
 
     def cross_validate(self, name: str, pipeline, X, y) -> dict:
-        """Run stratified CV and store mean ± std for each metric."""
+        """Lance une CV stratifiée et stocke moyenne ± écart-type par métrique."""
         raw = cross_validate(pipeline, X, y, cv=self.cv, scoring=_SCORING, n_jobs=-1)
         summary = {
             metric: {
@@ -76,9 +76,9 @@ class ModelEvaluator:
         return summary
 
     def cross_validate_all(self, pipelines: dict, X, y) -> None:
-        """Cross-validate a dict of {name: pipeline}."""
+        """Valide en croisé un dict {nom: pipeline}."""
         for name, pipeline in pipelines.items():
-            print(f"  Evaluating {name}...", end=" ", flush=True)
+            print(f"  Évaluation {name}...", end=" ", flush=True)
             self.cross_validate(name, pipeline, X, y)
             ap = self.cv_results[name]["average_precision"]["mean"]
             auc = self.cv_results[name]["roc_auc"]["mean"]
@@ -101,7 +101,7 @@ class ModelEvaluator:
     def evaluate_on_test(
         self, name: str, pipeline, X_train, y_train, X_test, y_test
     ) -> dict:
-        """Fit on train, evaluate on test. Stores the fitted pipeline."""
+        """Entraîne sur le train, évalue sur le test. Stocke la pipeline ajustée."""
         pipeline.fit(X_train, y_train)
         self._fitted_pipelines[name] = pipeline
 
@@ -120,6 +120,7 @@ class ModelEvaluator:
         return metrics
 
     def print_classification_report(self, name: str, pipeline, X_test, y_test) -> None:
+        """Affiche le rapport de classification sklearn sur le test."""
         y_pred = pipeline.predict(X_test)
         print(f"\n{'=' * 50}\n{name}\n{'=' * 50}")
         print(classification_report(y_test, y_pred))
@@ -129,6 +130,7 @@ class ModelEvaluator:
     # ------------------------------------------------------------------
 
     def cv_comparison_table(self, sort_by: str = "roc_auc") -> pd.DataFrame:
+        """Tableau des métriques CV (moyenne/écart-type) par modèle, trié."""
         rows = []
         for model_name, metrics in self.cv_results.items():
             row = {"model": model_name}
@@ -140,6 +142,7 @@ class ModelEvaluator:
         return df.sort_values(f"{sort_by}_mean", ascending=False).reset_index(drop=True)
 
     def test_comparison_table(self, sort_by: str = "roc_auc") -> pd.DataFrame:
+        """Tableau des métriques sur le test par modèle, trié."""
         rows = [
             {"model": name, **metrics} for name, metrics in self.test_results.items()
         ]
@@ -155,6 +158,7 @@ class ModelEvaluator:
     def plot_cv_comparison(
         self, metric: str = "roc_auc", figsize: tuple = (12, 6)
     ) -> plt.Figure:
+        """Barres horizontales d'une métrique CV par modèle (moyenne ± écart-type)."""
         df = self.cv_comparison_table(sort_by=metric)
         fig, ax = plt.subplots(figsize=figsize)
         ax.barh(
@@ -168,7 +172,7 @@ class ModelEvaluator:
             capsize=4,
         )
         ax.set_xlabel(metric)
-        ax.set_title(f"CV model comparison : {metric} (mean ± std)")
+        ax.set_title(f"Comparaison CV des modèles : {metric} (moyenne ± écart-type)")
         ax.invert_yaxis()
         fig.tight_layout()
         return fig
@@ -176,15 +180,17 @@ class ModelEvaluator:
     def plot_confusion_matrix(
         self, name: str, X_test, y_test, figsize: tuple = (7, 6)
     ) -> plt.Figure:
+        """Matrice de confusion d'un modèle ajusté, sur le test."""
         pipeline = self._fitted_pipelines[name]
         disp = ConfusionMatrixDisplay.from_estimator(pipeline, X_test, y_test)
         disp.figure_.set_size_inches(figsize)
-        disp.ax_.set_title(f"Confusion matrix : {name}")
+        disp.ax_.set_title(f"Matrice de confusion : {name}")
         return disp.figure_
 
     def plot_roc_curves(
         self, X_test, y_test, names: list[str] | None = None, figsize: tuple = (9, 7)
     ) -> plt.Figure:
+        """Courbes ROC de tous les modèles ajustés (ou d'un sous-ensemble)."""
         target_names = names or list(self._fitted_pipelines)
         fig, ax = plt.subplots(figsize=figsize)
         for name in target_names:
@@ -192,8 +198,8 @@ class ModelEvaluator:
                 RocCurveDisplay.from_estimator(
                     self._fitted_pipelines[name], X_test, y_test, ax=ax, name=name
                 )
-        ax.plot([0, 1], [0, 1], "k--", label="Random (AUC=0.50)")
-        ax.set_title("ROC Curves : all models")
+        ax.plot([0, 1], [0, 1], "k--", label="Aléatoire (AUC=0,50)")
+        ax.set_title("Courbes ROC : tous les modèles")
         ax.legend(loc="lower right", fontsize=8)
         fig.tight_layout()
         return fig
@@ -201,6 +207,7 @@ class ModelEvaluator:
     def plot_pr_curves(
         self, X_test, y_test, names: list[str] | None = None, figsize: tuple = (9, 7)
     ) -> plt.Figure:
+        """Courbes précision-rappel de tous les modèles (baseline = prévalence)."""
         target_names = names or list(self._fitted_pipelines)
         fig, ax = plt.subplots(figsize=figsize)
         for name in target_names:
@@ -213,14 +220,15 @@ class ModelEvaluator:
             baseline,
             color="k",
             linestyle="--",
-            label=f"Random (AP={baseline:.2f})",
+            label=f"Aléatoire (AP={baseline:.2f})",
         )
-        ax.set_title("Precision-Recall Curves : all models")
+        ax.set_title("Courbes précision-rappel : tous les modèles")
         ax.legend(loc="lower left", fontsize=8)
         fig.tight_layout()
         return fig
 
     def plot_metric_heatmap(self, figsize: tuple = (10, 6)) -> plt.Figure:
+        """Heatmap des métriques de test (modèles × métriques)."""
         df = self.test_comparison_table().set_index("model")
         fig, ax = plt.subplots(figsize=figsize)
         import seaborn as sns
@@ -235,7 +243,7 @@ class ModelEvaluator:
             vmin=0.5,
             vmax=1.0,
         )
-        ax.set_title("Test metrics heatmap")
+        ax.set_title("Heatmap des métriques sur le test")
         fig.tight_layout()
         return fig
 
@@ -460,6 +468,7 @@ class ModelEvaluator:
 
     @staticmethod
     def _error_type(yt, yp) -> str:
+        """Type de prédiction (VP/VN/FP/FN) à partir de la vraie classe et de la prédite."""
         if yt == 1 and yp == 1:
             return "Vrai positif"
         if yt == 0 and yp == 0:

@@ -11,7 +11,7 @@ from sklearn.model_selection import StratifiedKFold
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-# Search space per model : each callable takes a Trial and returns a param dict
+# Espace de recherche par modèle : chaque callable prend un Trial et renvoie un dict de params
 SearchSpace = Callable[[optuna.Trial], dict[str, Any]]
 
 SEARCH_SPACES: dict[str, SearchSpace] = {
@@ -71,10 +71,10 @@ SEARCH_SPACES: dict[str, SearchSpace] = {
 
 class HyperparameterTuner:
     """
-    Optuna-based hyperparameter optimisation.
+    Optimisation d'hyperparamètres basée sur Optuna.
 
-    Usage
-    -----
+    Utilisation
+    -----------
     tuner = HyperparameterTuner(n_trials=50, scoring="roc_auc")
     best_params = tuner.tune("xgboost", pipeline, X_train, y_train)
     fig = tuner.plot_optimization_history("xgboost")
@@ -146,15 +146,15 @@ class HyperparameterTuner:
     def tune(
         self,
         model_name: str,
-        pipeline,  # full sklearn Pipeline: preprocessor + classifier
+        pipeline,  # Pipeline sklearn complet : preprocessor + classifieur
         X,
         y,
     ) -> dict[str, Any]:
-        """Run Optuna study and return best hyperparameters."""
+        """Lance l'étude Optuna et renvoie les meilleurs hyperparamètres."""
         if model_name not in SEARCH_SPACES:
             raise ValueError(
-                f"No search space defined for {model_name!r}. "
-                f"Available: {list(SEARCH_SPACES)}"
+                f"Aucun espace de recherche défini pour {model_name!r}. "
+                f"Disponibles : {list(SEARCH_SPACES)}"
             )
 
         scorer = get_scorer(self.scoring)
@@ -256,18 +256,22 @@ class HyperparameterTuner:
         return overrides
 
     def plot_optimization_history(self, model_name: str):
+        """Courbe d'historique d'optimisation Optuna pour un modèle."""
         self._check_study(model_name)
         return optuna.visualization.plot_optimization_history(self.studies[model_name])
 
     def plot_param_importances(self, model_name: str):
+        """Importance des hyperparamètres estimée par Optuna pour un modèle."""
         self._check_study(model_name)
         return optuna.visualization.plot_param_importances(self.studies[model_name])
 
     def plot_parallel_coordinate(self, model_name: str):
+        """Graphe en coordonnées parallèles des essais Optuna pour un modèle."""
         self._check_study(model_name)
         return optuna.visualization.plot_parallel_coordinate(self.studies[model_name])
 
     def summary(self) -> None:
+        """Affiche le meilleur score et les meilleurs params de chaque modèle tuné."""
         for name, params in self.best_params.items():
             score = self.studies[name].best_value
             print(f"{name:25s} | best {self.scoring}: {score:.4f} | params: {params}")
@@ -324,7 +328,7 @@ class HyperparameterTuner:
     def load_study(self, model_name: str) -> optuna.Study:
         """Recharge une étude sauvegardée depuis la base SQLite."""
         if self._db_url is None:
-            raise ValueError("No storage configured; pass storage=<dir> to load.")
+            raise ValueError("Aucun storage configuré ; passez storage=<dossier> pour charger.")
         study = optuna.load_study(
             study_name=self._study_name(model_name), storage=self._db_url
         )
@@ -347,7 +351,7 @@ class HyperparameterTuner:
         """
         path = Path(storage) / cls.JSON_NAME
         if not path.exists():
-            raise FileNotFoundError(f"No saved params at {path}")
+            raise FileNotFoundError(f"Aucun paramètre sauvegardé à {path}")
         return json.loads(path.read_text())
 
     def _check_study(self, model_name: str) -> None:
@@ -359,4 +363,4 @@ class HyperparameterTuner:
             ):
                 self.load_study(model_name)
                 return
-            raise ValueError(f"No study found for {model_name!r}. Run tune() first.")
+            raise ValueError(f"Aucune étude pour {model_name!r}. Lancez tune() d'abord.")

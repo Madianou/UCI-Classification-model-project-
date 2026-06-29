@@ -18,24 +18,29 @@ uv run streamlit run app/streamlit_app.py # lance l'app streamlit
 ```
 src/adult_income/
 ├── data/
-│   ├── schemas.py        # constantes : noms des features, TARGET, classes
-│   └── loader.py         # DataLoader : lit les fichiers UCI locaux (split officiel / aléatoire)
+│   ├── schemas.py        # constantes : noms des features, TARGET, classes, regroupements
+│   └── loader.py         # DataLoader : lit les fichiers UCI locaux (split officiel)
 ├── eda/
-│   └── analyzer.py       # EDAAnalyzer : stats descriptives, distributions, corrélations
+│   ├── analyzer.py       # EDAAnalyzer : stats descriptives, distributions, corrélations
+│   └── clustering.py     # ClusteringAnalyzer : non-supervisé (PCA, k-means, t-SNE)
 ├── preprocessing/
 │   └── pipeline.py       # PreprocessingPipeline : ColumnTransformer + LabelEncoder cible
 ├── modeling/
 │   └── registry.py       # ModelRegistry : catalogue de 11 classifieurs sklearn/xgb
 ├── optimization/
-│   └── tuner.py          # HyperparameterTuner : optimisation Optuna (TPE), search spaces
+│   └── tuner.py          # HyperparameterTuner : optimisation Optuna (TPE), espaces de recherche
 └── evaluation/
-    └── evaluator.py      # ModelEvaluator : CV, métriques test, ROC, heatmap comparaison
+    └── evaluator.py      # ModelEvaluator : CV, métriques test, seuil, ROC/PR, équité, importance
 
 notebooks/
 ├── eda.ipynb            # Analyse exploratoire (sur le train uniquement)
-├── preprocessing.ipynb  # Effets de la pipeline de prétraitement
-├── modeling.ipynb       # Comparaison CV des modèles + ablations + finalistes
-└── (évaluation finale sur le test : notebook dédié, après l'hyper-optimisation)
+├── preprocessing.ipynb  # Vérification de la pipeline de prétraitement
+├── modeling.ipynb       # Comparaison CV des modèles + ablations + pondération des classes
+├── hyperopt.ipynb       # Hyper-optimisation Optuna + sélection du modèle + seuil
+├── unsupervised.ipynb   # Non-supervisé : PCA, k-means, t-SNE (train)
+└── evaluation.ipynb     # Évaluation finale sur le test (après hyper-optimisation)
+
+app/streamlit_app.py     # Démo interactive (uv run streamlit run app/streamlit_app.py)
 ```
 
 ## Utilisation rapide
