@@ -1,86 +1,97 @@
 {
   "logistic_regression": {
     "best_params": {
-      "C": 94.30800471587918,
+      "C": 0.74307253963762,
       "solver": "saga"
     },
-    "best_value": 0.7761941392765023,
+    "best_value": 0.7663134711780797,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "decision_tree": {
     "best_params": {
-      "max_depth": 15,
-      "min_samples_split": 6,
-      "min_samples_leaf": 20,
-      "criterion": "entropy"
+      "max_depth": 12,
+      "min_samples_split": 8,
+      "min_samples_leaf": 14,
+      "criterion": "gini"
     },
-    "best_value": 0.7705560968829793,
+    "best_value": 0.7820379543996409,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "random_forest": {
     "best_params": {
-      "n_estimators": 269,
-      "max_depth": 18,
-      "min_samples_split": 10,
+      "n_estimators": 263,
+      "max_depth": 19,
+      "min_samples_split": 12,
       "max_features": "sqrt"
     },
-    "best_value": 0.79952706234461,
+    "best_value": 0.8109968073469602,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "gradient_boosting": {
     "best_params": {
-      "n_estimators": 181,
-      "learning_rate": 0.04465754043577679,
+      "n_estimators": 226,
+      "learning_rate": 0.036824545181659854,
       "max_depth": 8,
-      "subsample": 0.7672753514931056,
-      "min_samples_leaf": 16
+      "subsample": 0.9601806383517583,
+      "min_samples_leaf": 14
     },
-    "best_value": 0.8120767317851397,
+    "best_value": 0.831413044236287,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "adaboost": {
     "best_params": {
-      "n_estimators": 330,
-      "learning_rate": 1.8661235042876683
+      "n_estimators": 387,
+      "learning_rate": 1.8913564608437765
     },
-    "best_value": 0.797852692249611,
+    "best_value": 0.8138151378188153,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "knn": {
     "best_params": {
-      "knn__n_neighbors": 50,
+      "n_neighbors": 43,
+      "weights": "uniform",
+      "metric": "euclidean"
+    },
+    "best_value": 0.7492061636922761,
+    "scoring": "average_precision",
+    "n_trials": 50
+  },
+  "knn_pca": {
+    "best_params": {
+      "pca__n_components": 36,
+      "knn__n_neighbors": 49,
       "knn__weights": "uniform",
       "knn__metric": "euclidean"
     },
-    "best_value": 0.751528669288324,
+    "best_value": 0.7494687281691961,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "xgboost": {
     "best_params": {
-      "n_estimators": 243,
-      "learning_rate": 0.04187922746823591,
-      "max_depth": 7,
-      "subsample": 0.6318910948150704,
-      "colsample_bytree": 0.9667113448337745,
-      "reg_alpha": 1.3641866997947212e-07,
-      "reg_lambda": 0.2508823064787459,
-      "min_child_weight": 5
+      "n_estimators": 248,
+      "learning_rate": 0.1671083884061845,
+      "max_depth": 4,
+      "subsample": 0.9655847473299866,
+      "colsample_bytree": 0.6371504780324381,
+      "reg_alpha": 0.0008461450647501329,
+      "reg_lambda": 0.2668521078641054,
+      "min_child_weight": 2
     },
-    "best_value": 0.8129280710201721,
+    "best_value": 0.8331887913238003,
     "scoring": "average_precision",
     "n_trials": 50
   },
   "svm": {
     "best_params": {
-      "estimator__C": 96.22588620260444
+      "estimator__C": 0.07292070055787729
     },
-    "best_value": 0.7760030833807123,
+    "best_value": 0.7661693011758423,
     "scoring": "average_precision",
     "n_trials": 50
   }

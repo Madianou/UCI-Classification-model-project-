@@ -16,11 +16,12 @@ from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 
 
-def _make_knn() -> Pipeline:
+def _make_knn_pca() -> Pipeline:
     """KNN preceded by a PCA(20) to fight the curse of dimensionality.
 
     The PCA lives inside the estimator so it is refit on each CV fold (no
     leakage). Input is dense (the preprocessor's OneHot uses sparse_output=False).
+    Compared against the plain ``knn`` to measure what the PCA step actually buys.
     """
     return Pipeline(
         [
@@ -63,7 +64,8 @@ _CATALOGUE: dict[str, type] = {
     "svm": lambda: CalibratedClassifierCV(
         LinearSVC(dual="auto", max_iter=5000, random_state=42), ensemble=False
     ),
-    "knn": _make_knn,  # PCA(20) + KNN
+    "knn": lambda: KNeighborsClassifier(n_jobs=-1),  # KNN simple (sans ACP)
+    "knn_pca": _make_knn_pca,  # PCA(20) + KNN (à comparer au knn simple)
     "xgboost": lambda: XGBClassifier(random_state=42, eval_metric="logloss", n_jobs=-1),
     "stacking": _make_stacking,
 }

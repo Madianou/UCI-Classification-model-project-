@@ -43,6 +43,12 @@ SEARCH_SPACES: dict[str, SearchSpace] = {
         "learning_rate": t.suggest_float("learning_rate", 0.01, 2.0, log=True),
     },
     "knn": lambda t: {
+        "n_neighbors": t.suggest_int("n_neighbors", 3, 50),
+        "weights": t.suggest_categorical("weights", ["uniform", "distance"]),
+        "metric": t.suggest_categorical("metric", ["euclidean", "manhattan"]),
+    },
+    "knn_pca": lambda t: {
+        "pca__n_components": t.suggest_int("pca__n_components", 5, 40),
         "knn__n_neighbors": t.suggest_int("knn__n_neighbors", 3, 50),
         "knn__weights": t.suggest_categorical("knn__weights", ["uniform", "distance"]),
         "knn__metric": t.suggest_categorical("knn__metric", ["euclidean", "manhattan"]),
