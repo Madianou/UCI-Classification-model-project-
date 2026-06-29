@@ -1,5 +1,5 @@
 """
-Démo interactive — Adult Income (UCI)
+Démo interactive : Adult Income (UCI)
 
 Lancement :
     uv run streamlit run app/streamlit_app.py
@@ -50,7 +50,7 @@ from adult_income import (
     TARGET,
 )
 
-st.set_page_config(page_title="Adult Income — Démo", layout="wide")
+st.set_page_config(page_title="Adult Income : Démo", layout="wide")
 
 # Fichier des hyperparamètres optimaux calculés par Optuna (scoring = AP).
 BEST_PARAMS_FILE = ROOT / "artifacts" / "optuna" / "best_params.json"
@@ -88,7 +88,7 @@ def cramers_matrix():
 
 
 # ----------------------------------------------------------------------
-# Analyse non-supervisée (t-SNE & k-means) — réutilise ClusteringAnalyzer.
+# Analyse non-supervisée (t-SNE & k-means) : réutilise ClusteringAnalyzer.
 #   Deux analyseurs distincts, chacun mis en cache une seule fois (objet
 #   lourd : prétraitement + PCA au démarrage) :
 #     - "train" : exploration de la structure des données (onglet 1) ;
@@ -155,7 +155,7 @@ def plot_kmeans_search(scores: pd.DataFrame) -> go.Figure:
     fig.update_xaxes(title_text="k", row=1, col=2)
     fig.update_layout(
         height=380, showlegend=False,
-        title=f"Choix du nombre de clusters — silhouette maximale à k={best}",
+        title=f"Choix du nombre de clusters : silhouette maximale à k={best}",
     )
     return fig
 
@@ -249,10 +249,10 @@ tab_data, tab_model = st.tabs([" Jeu de données", " Modèle & hyperparamètres"
 
 
 # ======================================================================
-# Onglet 1 — Exploration du jeu de données (style EDA)
+# Onglet 1 : Exploration du jeu de données (style EDA)
 # ======================================================================
 with tab_data:
-    st.header("Jeu de données — Adult Income (UCI)")
+    st.header("Jeu de données : Adult Income (UCI)")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Observations (train)", f"{len(df_train):,}")
@@ -564,7 +564,7 @@ with tab_data:
 
 
 # ======================================================================
-# Onglet 2 — Modèle & hyperparamètres
+# Onglet 2 : Modèle & hyperparamètres
 # ======================================================================
 with tab_model:
     st.header("Réaction du modèle aux hyperparamètres")
@@ -734,9 +734,9 @@ with tab_model:
                 "Précision-Rappel est plus informative que la ROC : elle se "
                 "concentre sur la classe positive minoritaire et son aire (AP) "
                 "chute dès que les faux positifs augmentent.\n\n"
-                f"- **PR AUC (AP)** = `{ap:.4f}` — base aléatoire ≈ "
+                f"- **PR AUC (AP)** = `{ap:.4f}` : base aléatoire ≈ "
                 f"`{baseline_pr:.2f}`\n"
-                f"- **ROC AUC** = `{auc:.4f}` — base aléatoire = `0.50`"
+                f"- **ROC AUC** = `{auc:.4f}` : base aléatoire = `0.50`"
             )
 
         # --- Projection t-SNE des erreurs du modèle (jeu de test) ---

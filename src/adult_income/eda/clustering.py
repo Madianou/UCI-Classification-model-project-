@@ -31,7 +31,7 @@ class ClusteringAnalyzer:
     (débruitage) et t-SNE (pré-réduction).
 
     Limite à garder en tête : après one-hot, l'espace est surtout binaire et la
-    distance euclidienne — sur laquelle reposent k-means et t-SNE — y est un peu
+    distance euclidienne : sur laquelle reposent k-means et t-SNE : y est un peu
     artificielle. La PCA intermédiaire atténue ce point sans le supprimer ; les
     conclusions restent **qualitatives**.
 
@@ -114,7 +114,7 @@ class ClusteringAnalyzer:
         ax.set_xlabel("composante principale")
         ax.set_ylabel("variance expliquée")
         ax2.set_ylabel("variance cumulée")
-        ax.set_title(f"PCA — éboulis des valeurs propres ({n_components} comp.)")
+        ax.set_title(f"PCA : éboulis des valeurs propres ({n_components} comp.)")
         fig.legend(loc="upper right", bbox_to_anchor=(0.88, 0.88), fontsize=8)
         fig.tight_layout()
         return fig
@@ -202,7 +202,7 @@ class ClusteringAnalyzer:
 
         ``extra`` injecte des colonnes additionnelles **moyennées par cluster**
         à partir de vecteurs alignés positionnellement sur ``X`` (longueur =
-        ``len(self.X)``) — typiquement, en évaluation, le **taux d'erreur du
+        ``len(self.X)``) : typiquement, en évaluation, le **taux d'erreur du
         modèle** pour repérer les clusters « frontière » qui concentrent les
         mauvaises prédictions.
         """
@@ -253,7 +253,7 @@ class ClusteringAnalyzer:
         beaucoup le rendu, à explorer. ``n_jobs=-1`` exploite les cœurs locaux.
 
         Rappel : sur un t-SNE, **les distances entre clusters et leurs tailles
-        ne sont pas fiables** — lecture purement qualitative.
+        ne sont pas fiables** : lecture purement qualitative.
         """
         reduced = self.reduce(n_components)
         idx = np.arange(len(reduced))
@@ -288,7 +288,7 @@ class ClusteringAnalyzer:
 
         - ``color_by="income"`` : les deux classes forment-elles des régions
           séparées ? (lecture directe de la difficulté du problème de classif) ;
-        - ``color_by="cluster"`` : validation croisée — si les clusters k-means
+        - ``color_by="cluster"`` : validation croisée : si les clusters k-means
           coïncident avec des régions cohérentes du t-SNE, ils captent une vraie
           structure. Nécessite :meth:`fit_kmeans` au préalable ;
         - ``color_by="custom"`` : colorie par ``values`` (vecteur **aligné

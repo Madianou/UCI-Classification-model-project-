@@ -63,7 +63,7 @@ class EDAAnalyzer:
 
         by_class=True breaks the statistics down per income class (bivariate),
         so each feature's mean/median/std can be compared between <=50K and
-        >50K — a quick read of which variables separate the classes.
+        >50K : a quick read of which variables separate the classes.
         """
         if not by_class:
             return self.X[NUMERICAL_FEATURES].describe().T
@@ -76,7 +76,7 @@ class EDAAnalyzer:
         Equivalent to Pearson between the feature and the 0/1-encoded income, so
         it captures the signed linear/monotonic link (positive = associated with
         >50K). Linear only: it underestimates non-linear features such as
-        capital-gain — read it alongside the mutual information.
+        capital-gain : read it alongside the mutual information.
         """
         income_binary = (self.y == POSITIVE_CLASS).astype(int)
         return (
@@ -204,50 +204,6 @@ class EDAAnalyzer:
             .set_index("feature")
             .sort_values("cramers_v", ascending=False)
         )
-
-    def mann_whitney_target(
-        self, variables: str | list[str] | None = None
-    ) -> pd.DataFrame:
-        """Mann-Whitney U test of each numerical feature between the two income
-        classes, with the rank-biserial correlation as effect size.
-
-        Non-parametric (no normality assumption) and needs no binning, so it is
-        the natural quanti<->binary-target test and avoids the artifacts of
-        chi2_numeric_target (e.g. capital-gain/loss collapsing to a single bin).
-
-        rank_biserial lies in [-1, 1]: the sign gives the direction (positive =
-        feature larger among >50K), the magnitude the effect size (|r| < 0.1
-        negligible). As always at n~49k, p_value is ~0 almost everywhere, so
-        read it together with the effect size (e.g. fnlwgt: significant yet
-        rank_biserial ~ 0 -> drop decision holds).
-
-        Returns one row per variable (U, p_value, rank_biserial, median_pos,
-        median_neg), sorted by absolute effect size.
-        """
-        if variables is None:
-            variables = NUMERICAL_FEATURES
-        if isinstance(variables, str):
-            variables = [variables]
-        is_pos = self.df[TARGET] == POSITIVE_CLASS
-        rows = []
-        for col in variables:
-            pos = self.df.loc[is_pos, col].dropna()
-            neg = self.df.loc[~is_pos, col].dropna()
-            u, p = stats.mannwhitneyu(pos, neg, alternative="two-sided")
-            # rank-biserial = 2 * P(pos > neg) - 1, derived from U
-            rank_biserial = 2 * u / (len(pos) * len(neg)) - 1
-            rows.append(
-                {
-                    "feature": col,
-                    "U": u,
-                    "p_value": p,
-                    "rank_biserial": rank_biserial,
-                    "median_pos": pos.median(),
-                    "median_neg": neg.median(),
-                }
-            )
-        out = pd.DataFrame(rows).set_index("feature")
-        return out.reindex(out["rank_biserial"].abs().sort_values(ascending=False).index)
 
     def cramers_v_matrix(self, include_target: bool = False) -> pd.DataFrame:
         """Symmetric Cramér's V matrix between all categorical features.
@@ -711,7 +667,7 @@ class EDAAnalyzer:
                         ha="right", va="bottom")
         ax.set_xlabel(num_col)
         ax.set_ylabel("% >50K")
-        ax.set_title(f"{cat_col} vs {num_col} — taux >50K superposés "
+        ax.set_title(f"{cat_col} vs {num_col} : taux >50K superposés "
                      f"(identiques : {identical})")
         ax.legend(loc="upper left")
         fig.tight_layout()

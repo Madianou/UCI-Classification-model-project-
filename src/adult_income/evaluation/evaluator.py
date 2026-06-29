@@ -168,7 +168,7 @@ class ModelEvaluator:
             capsize=4,
         )
         ax.set_xlabel(metric)
-        ax.set_title(f"CV model comparison — {metric} (mean ± std)")
+        ax.set_title(f"CV model comparison : {metric} (mean ± std)")
         ax.invert_yaxis()
         fig.tight_layout()
         return fig
@@ -179,7 +179,7 @@ class ModelEvaluator:
         pipeline = self._fitted_pipelines[name]
         disp = ConfusionMatrixDisplay.from_estimator(pipeline, X_test, y_test)
         disp.figure_.set_size_inches(figsize)
-        disp.ax_.set_title(f"Confusion matrix — {name}")
+        disp.ax_.set_title(f"Confusion matrix : {name}")
         return disp.figure_
 
     def plot_roc_curves(
@@ -193,7 +193,7 @@ class ModelEvaluator:
                     self._fitted_pipelines[name], X_test, y_test, ax=ax, name=name
                 )
         ax.plot([0, 1], [0, 1], "k--", label="Random (AUC=0.50)")
-        ax.set_title("ROC Curves — all models")
+        ax.set_title("ROC Curves : all models")
         ax.legend(loc="lower right", fontsize=8)
         fig.tight_layout()
         return fig
@@ -215,7 +215,7 @@ class ModelEvaluator:
             linestyle="--",
             label=f"Random (AP={baseline:.2f})",
         )
-        ax.set_title("Precision-Recall Curves — all models")
+        ax.set_title("Precision-Recall Curves : all models")
         ax.legend(loc="lower left", fontsize=8)
         fig.tight_layout()
         return fig
@@ -331,7 +331,7 @@ class ModelEvaluator:
         ax.set_ylabel(ylabel)
         title = "Courbe d'apprentissage"
         if model_name:
-            title += f" — {model_name} optimisé"
+            title += f" : {model_name} optimisé"
         ax.set_title(title)
         ax.grid(alpha=0.3)
         ax.legend()
@@ -373,7 +373,7 @@ class ModelEvaluator:
         ``threshold_metric`` (réglé sur les mêmes probas hors-pli).
 
         L'AP / ROC-AUC (classement) sont quasi insensibles à la pondération ;
-        l'effet se voit sur F1/recall **à seuil fixe** — et la comparaison
+        l'effet se voit sur F1/recall **à seuil fixe** : et la comparaison
         ``pondéré @0,50`` vs ``aucun @seuil*`` montre que la pondération fait
         surtout ce que le réglage du seuil fait déjà.
 
@@ -405,6 +405,32 @@ class ModelEvaluator:
                     "recall@seuil*": m_tun["recall"],
                 })
         return pd.DataFrame(rows)
+
+    @staticmethod
+    def plot_grouped_bars(
+        df: pd.DataFrame, title: str | None = None, ylabel: str | None = None,
+        figsize: tuple = (9, 5),
+    ) -> plt.Figure:
+        """Barres groupées d'un DataFrame (index = groupes en X, colonnes = séries).
+
+        L'axe Y démarre juste sous la plus petite valeur pour rendre les écarts
+        lisibles.
+        """
+        ax = df.plot.bar(
+            figsize=figsize, rot=20,
+            color=["steelblue", "tomato", "seagreen", "goldenrod"][: df.shape[1]],
+        )
+        lo, hi = float(np.nanmin(df.to_numpy())), float(np.nanmax(df.to_numpy()))
+        pad = (hi - lo) * 0.15 or 0.01
+        ax.set_ylim(max(0.0, lo - 3 * pad), hi + pad)
+        if ylabel:
+            ax.set_ylabel(ylabel)
+        if title:
+            ax.set_title(title)
+        ax.grid(axis="y", alpha=0.3)
+        fig = ax.figure
+        fig.tight_layout()
+        return fig
 
     def plot_confusion_pair(
         self, y_true, y_pred, labels=("<=50K", ">50K"), figsize: tuple = (11, 4)

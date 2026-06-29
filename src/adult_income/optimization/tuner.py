@@ -11,7 +11,7 @@ from sklearn.model_selection import StratifiedKFold
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-# Search space per model — each callable takes a Trial and returns a param dict
+# Search space per model : each callable takes a Trial and returns a param dict
 SearchSpace = Callable[[optuna.Trial], dict[str, Any]]
 
 SEARCH_SPACES: dict[str, SearchSpace] = {

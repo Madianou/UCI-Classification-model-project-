@@ -155,9 +155,6 @@ class PreprocessingPipeline:
         ]
 
         self._preprocessor = ColumnTransformer(transformers, remainder="drop")
-        # Emit a DataFrame (not ndarray) so feature names stay consistent
-        # between fit and predict. Avoids the spurious LightGBM/sklearn
-        # "X does not have valid feature names" warning (LightGBM #6798).
         self._preprocessor.set_output(transform="pandas")
         return self._preprocessor
 
@@ -197,6 +194,45 @@ class PreprocessingPipeline:
         has-any-gain/loss signal independently of the magnitude.
         """
         return (df > 0).astype(float)
+
+    def plot_capital_treatment(
+        self, X_raw: pd.DataFrame, X_transformed: pd.DataFrame
+    ) -> tuple:
+        """Verification plot of the capital-* "hurdle" decomposition.
+
+        Left panel  : raw capital-gain (log y-scale, zero-inflated heavy tail).
+        Right panel : the log1p + RobustScaler output -> same magnitude ordering
+        with a compressed tail. Also returns the share of non-zero
+        capital-gain/loss captured by the has_* flags.
+
+        Requires ``capital_treatment="hurdle"`` (the transformed frame must hold
+        the ``num_log__`` / ``num_bin__`` columns). Returns ``(fig, proportions)``.
+        """
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+
+        if self.capital_treatment != "hurdle":
+            raise ValueError(
+                "plot_capital_treatment requires capital_treatment='hurdle'"
+            )
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        sns.histplot(X_raw["capital-gain"], ax=axes[0], bins=40, color="steelblue")
+        axes[0].set_title("capital-gain - brut")
+        axes[0].set_yscale("log")
+        sns.histplot(
+            X_transformed["num_log__capital-gain"],
+            ax=axes[1],
+            bins=40,
+            color="seagreen",
+        )
+        axes[1].set_title("capital-gain - log1p + RobustScaler")
+        fig.suptitle("capital-gain : log1p conserve la magnitude", fontsize=14)
+        fig.tight_layout()
+
+        bin_cols = [f"num_bin__has_{c}" for c in BINARY_NUMERICAL_FEATURES]
+        proportions = X_transformed[bin_cols].mean().rename("proportion à 1").round(4)
+        return fig, proportions
 
     def build_pipeline(self, estimator: BaseEstimator) -> Pipeline:
         """Compose the preprocessor with a classifier into a full Pipeline."""

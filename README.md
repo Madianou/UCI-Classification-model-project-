@@ -1,4 +1,4 @@
-# Projet AI28 — Adult Income
+# Projet AI28 : Adult Income
 
 Projet de machine learning sur le dataset [Adult Income (UCI)](https://archive.ics.uci.edu/dataset/2/adult).
 Objectif : prédire si le revenu annuel d'un individu dépasse 50 K$ (classification binaire).
@@ -19,17 +19,17 @@ uv run streamlit run app/streamlit_app.py # lance l'app streamlit
 src/adult_income/
 ├── data/
 │   ├── schemas.py        # constantes : noms des features, TARGET, classes
-│   └── loader.py         # DataLoader — lit les fichiers UCI locaux (split officiel / aléatoire)
+│   └── loader.py         # DataLoader : lit les fichiers UCI locaux (split officiel / aléatoire)
 ├── eda/
-│   └── analyzer.py       # EDAAnalyzer — stats descriptives, distributions, corrélations
+│   └── analyzer.py       # EDAAnalyzer : stats descriptives, distributions, corrélations
 ├── preprocessing/
-│   └── pipeline.py       # PreprocessingPipeline — ColumnTransformer + LabelEncoder cible
+│   └── pipeline.py       # PreprocessingPipeline : ColumnTransformer + LabelEncoder cible
 ├── modeling/
-│   └── registry.py       # ModelRegistry — catalogue de 11 classifieurs sklearn/xgb
+│   └── registry.py       # ModelRegistry : catalogue de 11 classifieurs sklearn/xgb
 ├── optimization/
-│   └── tuner.py          # HyperparameterTuner — optimisation Optuna (TPE), search spaces
+│   └── tuner.py          # HyperparameterTuner : optimisation Optuna (TPE), search spaces
 └── evaluation/
-    └── evaluator.py      # ModelEvaluator — CV, métriques test, ROC, heatmap comparaison
+    └── evaluator.py      # ModelEvaluator : CV, métriques test, ROC, heatmap comparaison
 
 notebooks/
 ├── eda.ipynb            # Analyse exploratoire (sur le train uniquement)

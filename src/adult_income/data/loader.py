@@ -16,7 +16,7 @@ class DataLoader:
       its labels carry a trailing dot (``<=50K.``), both handled here.
 
     Only the **official split** is exposed: each file *is* a split. The test set
-    is meant to stay untouched until final evaluation — in particular the EDA
+    is meant to stay untouched until final evaluation : in particular the EDA
     should run on the **train set only** (use :meth:`load_train`).
     """
 

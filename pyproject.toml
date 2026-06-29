@@ -8,7 +8,7 @@ dependencies = [
     # Data manipulation
     "pandas>=2.2",
     "numpy>=2.0",
-    # Machine learning — core
+    # Machine learning : core
     "scikit-learn>=1.5",
     # Gradient boosting
     "xgboost>=2.1",
