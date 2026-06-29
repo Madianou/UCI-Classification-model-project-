@@ -288,13 +288,13 @@ class HyperparameterTuner:
         import pandas as pd
 
         rows = [
-            {"model": name, "PR-AUC (CV)": info["best_value"], "n_trials": info["n_trials"]}
+            {"model": name, "Average Precision (CV)": info["best_value"], "n_trials": info["n_trials"]}
             for name, info in best.items()
         ]
         df = pd.DataFrame(rows)
         if df.empty:
             return df
-        return df.sort_values("PR-AUC (CV)", ascending=False).reset_index(drop=True)
+        return df.sort_values("Average Precision (CV)", ascending=False).reset_index(drop=True)
 
     # ------------------------------------------------------------------
     # Persistance

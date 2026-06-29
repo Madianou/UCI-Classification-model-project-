@@ -67,7 +67,7 @@ POSITIVE_CLASS: str = ">50K"
 NEGATIVE_CLASS: str = "<=50K"
 
 # Asymetric features with many outliers that may benefit from RobustScaler instead of StandardScaler
-ASIMMETRIC_NUMERICAL_FEATURES: list[str] = ["capital-gain", "capital-loss"]
+ASYMMETRIC_NUMERICAL_FEATURES: list[str] = ["capital-gain", "capital-loss"]
 
 # Dropped features (excluded from modelling, kept in the base lists above for EDA):
 # - "education" is redundant with "education-num"
@@ -83,7 +83,7 @@ FEATURES_TO_DROP: list[str] = ["education", "fnlwgt"]
 # Numerical features scaled with StandardScaler (excludes asymmetric ones and dropped ones)
 NORMAL_NUMERICAL_FEATURES: list[str] = [
     f for f in NUMERICAL_FEATURES
-    if f not in ASIMMETRIC_NUMERICAL_FEATURES and f not in FEATURES_TO_DROP
+    if f not in ASYMMETRIC_NUMERICAL_FEATURES and f not in FEATURES_TO_DROP
 ]
 
 # ----------------------------------------------------------------------

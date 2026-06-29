@@ -12,8 +12,6 @@ dependencies = [
     "scikit-learn>=1.5",
     # Gradient boosting
     "xgboost>=2.1",
-    "lightgbm>=4.5",
-    "catboost>=1.2",
     # Hyperparameter optimisation
     "optuna>=3.6",
     "optuna-integration[sklearn]>=3.6",

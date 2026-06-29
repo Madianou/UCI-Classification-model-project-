@@ -25,7 +25,7 @@ src/adult_income/
 ├── preprocessing/
 │   └── pipeline.py       # PreprocessingPipeline — ColumnTransformer + LabelEncoder cible
 ├── modeling/
-│   └── registry.py       # ModelRegistry — catalogue de 11 classifieurs sklearn/xgb/lgbm/cat
+│   └── registry.py       # ModelRegistry — catalogue de 10 classifieurs sklearn/xgb
 ├── optimization/
 │   └── tuner.py          # HyperparameterTuner — optimisation Optuna (TPE), search spaces
 └── evaluation/
@@ -69,4 +69,4 @@ best = tuner.tune("xgboost", pipelines["xgboost"], X_train, y_train_enc)
 
 ## Modèles inclus
 
-Logistic Regression · Decision Tree · Random Forest · Gradient Boosting · AdaBoost · SVM · KNN · Naive Bayes · XGBoost · LightGBM · CatBoost
+Dummy (baseline) · Logistic Regression · Decision Tree · Random Forest · Gradient Boosting · AdaBoost · SVM · KNN (PCA + KNN) · XGBoost · Stacking
